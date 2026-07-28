@@ -19,6 +19,9 @@ dependencies = [
 st = ["sentence-transformers>=3.0"]
 nlp = ["spacy>=3.7"]
 viz = ["kedro-viz>=9.0"]
+# Corpus acquisition from the Hugging Face Hub. Optional so the core package
+# stays network-free: without it, only local corpora (data/01_raw/*.jsonl) load.
+hf = ["datasets>=3.0", "huggingface-hub>=0.25"]
 
 [project.scripts]
 cybernaut-mini = "cybernaut_mini.cli:app"
@@ -59,7 +62,15 @@ mypy_path = "src"
 packages = ["cybernaut_mini"]
 
 [[tool.mypy.overrides]]
-module = ["rank_bm25", "sklearn.*", "kedro.*", "sentence_transformers", "spacy"]
+module = [
+    "rank_bm25",
+    "sklearn.*",
+    "kedro.*",
+    "sentence_transformers",
+    "spacy",
+    # Hugging Face `datasets`, only present with the optional `hf` extra.
+    "datasets",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
