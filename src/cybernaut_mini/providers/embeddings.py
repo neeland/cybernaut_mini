@@ -91,7 +91,15 @@ class SentenceTransformersEmbedder:
         try:
             from sentence_transformers import SentenceTransformer
         except ImportError as exc:
-            msg = "sentence-transformers is not installed; install the [st] extra"
+            msg = (
+                "embedding provider 'sentence_transformers' needs the optional 'st' "
+                "extra, which the default install does not include.\n"
+                "  install it   : uv sync --extra st       (or: make install-prod)\n"
+                "  or stay local: --config configs/tiny.yaml   "
+                "(kedro: --params embedding.provider=hash)\n"
+                "The hash embedder is a first-class offline provider, not a stub — it "
+                "needs no download and keeps builds byte-for-byte reproducible."
+            )
             raise ConfigError(msg) from exc
         self._model_name = model_name
         self._revision = revision
