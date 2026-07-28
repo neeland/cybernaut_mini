@@ -4,16 +4,32 @@ from pathlib import Path
 
 import pytest
 
-from cybernaut_mini.config import AppConfig, ConfigError, load_config
+from cybernaut_mini.config import ConfigError, load_config
 
 
 def test_defaults_match_spec() -> None:
     config = load_config(environ={})
     assert config.seed == 42
-    assert config.embedding.provider == "sentence_transformers"
+    # The baseline provider is the offline hash embedder, not sentence_transformers:
+    # see test_default_config_runs_on_a_bare_install below.
+    assert config.embedding.provider == "hash"
     assert config.index.n_shards == 12
     assert config.rrf.k == 60
     assert config.agent.max_retrieval_calls == 18
+
+
+def test_default_config_runs_on_a_bare_install() -> None:
+    """The default config must not require an optional extra.
+
+    Regression: the baseline selected 'sentence_transformers', which lives behind the
+    optional 'st' extra that neither `uv sync` nor the devcontainer installs. A bare
+    `kedro run` or `cybernaut-mini build` therefore died with "sentence-transformers is
+    not installed" on a freshly built container.
+
+    ``require_offline_compatible`` is exactly the "needs no download" predicate, so
+    asserting it on the defaults pins the property.
+    """
+    load_config(environ={}).require_offline_compatible()
 
 
 def test_yaml_overrides_defaults(tmp_path: Path) -> None:
@@ -50,7 +66,11 @@ def test_unknown_key_fails_validation(tmp_path: Path) -> None:
 
 
 def test_offline_rejects_sentence_transformers() -> None:
-    config = AppConfig()
+    # Explicit rather than AppConfig(): the default provider is 'hash' now, so this
+    # must opt into sentence_transformers to exercise the rejection at all.
+    config = load_config(
+        environ={}, overrides={"embedding": {"provider": "sentence_transformers"}}
+    )
     with pytest.raises(ConfigError, match="offline"):
         config.require_offline_compatible()
 

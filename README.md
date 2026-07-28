@@ -272,9 +272,12 @@ violates. `kedro viz` renders only the `index_build` and `evaluation` pipelines.
 
 - **Educational only.** Not a production search system. Results on real corpora
   depend heavily on embedding quality.
-- **Hash embedder.** Fast and offline but poor recall on paraphrase-heavy
-  queries. Use `provider: sentence_transformers` for better quality (requires
-  internet on first run).
+- **Hash embedder is the default.** Fast, offline, and deterministic, but poor
+  recall on paraphrase-heavy queries. It is the baseline so the project runs on a
+  bare `uv sync` with no downloads. For better quality, opt into real embeddings
+  explicitly — `--config configs/default.yaml` (CLI) or `--env prod` (Kedro) —
+  after installing the extra with `uv sync --extra st` (or `make install-prod`).
+  That path needs internet on first run.
 - **Small corpus.** The 63-doc synthetic corpus is for testing; metric numbers
   above should not be extrapolated to real workloads.
 - **sklearn version drift.** KMeans output depends on the installed sklearn

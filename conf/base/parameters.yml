@@ -1,12 +1,21 @@
-# Kedro-side defaults; mirror configs/default.yaml. The Typer CLI passes the chosen
-# configs/*.yaml as extra_params, which override these at run time.
+# Kedro-side defaults. The Typer CLI passes the chosen configs/*.yaml as extra_params,
+# which override these at run time.
 #
 # Paths are NOT parameters any more — they live in conf/base/catalog.yml and are
 # overridden per run via `${runtime_params:...}` (the CLI's --input / --index flags)
 # or per environment via `--env prod`.
+#
+# These defaults deliberately do NOT mirror configs/default.yaml: that file is the
+# quality profile and selects sentence_transformers, which lives behind the optional
+# 'st' extra. A bare `kedro run` must work on the default install, so the baseline
+# here is the offline hash embedder. Opt into real embeddings explicitly with
+# `--config configs/default.yaml` (CLI) or `--env prod` (Kedro).
 seed: 42
 embedding:
-  provider: sentence_transformers
+  # Deterministic feature hashing — no download, no extra, works offline. A
+  # first-class provider, not a stub.
+  provider: hash
+  # Used only when provider is 'sentence_transformers'.
   model: intfloat/multilingual-e5-small
   # Commit SHA of the model weights. null resolves to the repo's default branch,
   # which is fine locally but not reproducible: two builds months apart can embed

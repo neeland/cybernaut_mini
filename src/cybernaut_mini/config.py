@@ -24,7 +24,11 @@ class ConfigError(ValueError):
 class EmbeddingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    provider: Literal["hash", "sentence_transformers"] = "sentence_transformers"
+    # Defaults to the offline provider so a bare `kedro run` or `cybernaut-mini build`
+    # works on the default install. 'sentence_transformers' is the quality option but
+    # lives behind the optional 'st' extra, so it must be opted into explicitly
+    # (configs/default.yaml, or --env prod).
+    provider: Literal["hash", "sentence_transformers"] = "hash"
     model: str = "intfloat/multilingual-e5-small"
     revision: str | None = Field(
         default=None,

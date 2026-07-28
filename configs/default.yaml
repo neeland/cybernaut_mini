@@ -1,5 +1,14 @@
-# Quality-oriented defaults: real sentence-transformers embeddings (downloads the
-# model on first use). For a fully offline run, use configs/tiny.yaml.
+# Quality profile: real sentence-transformers embeddings.
+#
+# This is an explicit opt-in, NOT the baseline. It requires the optional 'st' extra
+# and downloads the model on first use:
+#
+#     uv sync --extra st          # or: make install-prod
+#     cybernaut-mini build --input ... --index ... --config configs/default.yaml
+#
+# Without --config, the offline hash embedder is used (see conf/base/parameters.yml),
+# so the project runs on a bare install. For a fully offline profile with a smaller
+# shard count, use configs/tiny.yaml.
 seed: 42
 embedding:
   provider: sentence_transformers
