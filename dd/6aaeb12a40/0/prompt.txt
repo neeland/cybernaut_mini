@@ -1,0 +1,1 @@
+/oh-my-claudecode:external-context "write a md guide outline the technical components from this blog that an agents should build" save md next to original @data/00_reference/the-road-to-cybernaut-1.md /effort max
