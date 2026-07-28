@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cybernaut-1 Blog: Build References Analysis</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        header h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        header p {
+            color: #666;
+            font-size: 1.1em;
+            line-height: 1.6;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-card .number {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .panel h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .reference-item {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .reference-item:hover {
+            background: #e8eaf6;
+            transform: translateX(5px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        }
+
+        .reference-item.active {
+            background: #e8eaf6;
+            border-left-color: #764ba2;
+        }
+
+        .ref-count {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            margin-right: 8px;
+        }
+
+        .ref-text {
+            color: #555;
+            font-size: 0.95em;
+            margin-top: 8px;
+            line-height: 1.5;
+            font-style: italic;
+        }
+
+        .ref-quote {
+            background: white;
+            border-left: 3px solid #764ba2;
+            padding: 12px;
+            margin-top: 10px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #333;
+        }
+
+        .filter-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            background: #f0f0f0;
+            border: 2px solid #ddd;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+
+        .filter-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .filter-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .network-visualization {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+            min-height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .node {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .node:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .node.highlight {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            transform: scale(1.15);
+        }
+
+        .connection-info {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.85em;
+            color: #555;
+            margin-top: 5px;
+        }
+
+        .detailed-view {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+            margin-top: 30px;
+        }
+
+        .detailed-view h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .detailed-section {
+            margin-bottom: 30px;
+        }
+
+        .detailed-section h3 {
+            color: #764ba2;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .build-context {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+
+        .build-context strong {
+            color: #667eea;
+        }
+
+        .timeline {
+            position: relative;
+            padding: 20px 0;
+        }
+
+        .timeline-item {
+            padding-left: 40px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: 8px;
+            top: 5px;
+            width: 16px;
+            height: 16px;
+            background: #667eea;
+            border-radius: 50%;
+            border: 3px solid white;
+            box-shadow: 0 0 0 2px #667eea;
+        }
+
+        .timeline-item::after {
+            content: '';
+            position: absolute;
+            left: 15px;
+            top: 25px;
+            width: 2px;
+            height: 40px;
+            background: #ddd;
+        }
+
+        .timeline-item:last-child::after {
+            display: none;
+        }
+
+        .timeline-item .label {
+            font-weight: 600;
+            color: #667eea;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .timeline-item .content {
+            color: #555;
+            font-size: 0.95em;
+            line-height: 1.5;
+        }
+
+        footer {
+            text-align: center;
+            color: white;
+            margin-top: 40px;
+            padding: 20px;
+            font-size: 0.9em;
+        }
+
+        .highlight-text {
+            background: linear-gradient(120deg, #ffd60a, #ffc300);
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Cybernaut-1 Blog Analysis</h1>
+            <p>Complete mapping of "build" references in "The Road to Cybernaut-1: Rebuilding Search for AI"</p>
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="number">15</div>
+                    <div class="label">Build References</div>
+                </div>
+                <div class="stat-card">
+                    <div class="number">3</div>
+                    <div class="label">Categories</div>
+                </div>
+                <div class="stat-card">
+                    <div class="number">250,000</div>
+                    <div class="label">Shards (Infrastructure)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="number">8</div>
+                    <div class="label">Pipeline Stages</div>
+                </div>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <div class="panel">
+                <h2>All Build References</h2>
+                <div class="filter-buttons">
+                    <button class="filter-btn active" onclick="filterReferences('all')">All (15)</button>
+                    <button class="filter-btn" onclick="filterReferences('architecture')">Architecture (6)</button>
+                    <button class="filter-btn" onclick="filterReferences('philosophy')">Philosophy (5)</button>
+                    <button class="filter-btn" onclick="filterReferences('implementation')">Implementation (4)</button>
+                </div>
+                <div id="references-list"></div>
+            </div>
+
+            <div class="panel">
+                <h2>Build Components Network</h2>
+                <div class="network-visualization" id="network"></div>
+            </div>
+        </div>
+
+        <div class="detailed-view">
+            <h2>Detailed Analysis: The "Build" Narrative</h2>
+
+            <div class="detailed-section">
+                <h3>1. Philosophical Foundation - "Search is Being Rebuilt"</h3>
+                <div class="build-context">
+                    <strong>Core Concept:</strong> The article title itself is "The Road to Cybernaut-1: <span class="highlight-text">Rebuilding Search for AI</span>" - this frames the entire piece as a reconstruction of search infrastructure specifically designed for AI agents rather than humans.
+                </div>
+                <p>
+                    The blog post's fundamental premise is that current search engines were "built for people" and "built for advertisers" (line 16-17), and therefore must be fundamentally rebuilt from scratch with different trade-offs to serve AI agents effectively. This represents a massive architectural shift, not just optimization.
+                </p>
+                <div class="build-context">
+                    <strong>Quote:</strong> "The problem is that search was not built for them. It was built for us - no, let's be honest - it was built for advertisers."
+                </div>
+            </div>
+
+            <div class="detailed-section">
+                <h3>2. Infrastructure Architecture - "Building Systems"</h3>
+                <div class="build-context">
+                    <strong>Component:</strong> The 250,000 "shards" that comprise the NOSIBLE infrastructure are described in terms of their structural composition and construction methodology.
+                </div>
+                <p>
+                    The blog explains: "Building systems involves making trade-offs" (Section: "AI needs its own search engine"). The document then details what is "built" into each shard:
+                </p>
+                <ul style="margin-left: 20px; margin-top: 10px; line-height: 1.8;">
+                    <li>Full-Text Index</li>
+                    <li>Lexical Index (BM25)</li>
+                    <li>Semantic Index</li>
+                    <li>Vocabulary, Keywords, Entities</li>
+                    <li>Classifiers and Compressors</li>
+                    <li>Bloom Filters and Rerankers</li>
+                </ul>
+                <div class="build-context" style="margin-top: 15px;">
+                    <strong>Quote:</strong> "If you opened up a shard you would find: Metadata, Full-Text Index, Lexical Index (BM25)..."
+                </div>
+            </div>
+
+            <div class="detailed-section">
+                <h3>3. Training & Learning - "Shards are Built Using..."</h3>
+                <div class="build-context">
+                    <strong>Process:</strong> "Shards are <span class="highlight-text">learned using an efficient algorithm</span> we developed for identifying semantically and lexically coherent clusters of texts that are also approximately uniformly sized."
+                </div>
+                <p>
+                    This is fundamentally a machine learning construction process where:
+                </p>
+                <ul style="margin-left: 20px; margin-top: 10px; line-height: 1.8;">
+                    <li>250,000,000 embeddings were used in the most recent training run</li>
+                    <li>Next run will use 1 billion embeddings and "a lot of GPU time"</li>
+                    <li>Each shard is "independently capable" of performing multiple retrieval tasks</li>
+                </ul>
+            </div>
+
+            <div class="detailed-section">
+                <h3>4. The Pipeline Construction - Eight Stages</h3>
+                <div class="build-context">
+                    <strong>Meta-Point:</strong> The blog describes the <span class="highlight-text">eight-stage retrieval pipeline</span> as something that had to be <strong>built</strong> to handle multilingual queries and sophisticated search orchestration.
+                </div>
+                <div class="timeline">
+                    <div class="timeline-item">
+                        <div class="label">Stage 1</div>
+                        <div class="content">Language Detection and Translation - Built to handle 170+ languages</div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="label">Stage 2</div>
+                        <div class="content">Multilingual Tokenization - Custom standardized interface wrapping 12+ NLP packages</div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="label">Stage 3</div>
+                        <div class="content">Search Intent Prediction - System to identify high-quality search intents</div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="label">Stage 4</div>
+                        <div class="content">Instruction Tuning and Embedding - LLM-optimized instruction templates</div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="label">Stage 5</div>
+                        <div class="content">Shard Selection - Four ranking factors combined via reciprocal rank fusion</div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="label">Stage 6</div>
+                        <div class="content">Shard Reranking - Four different reranking strategies</div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="label">Stage 7</div>
+                        <div class="content">Question Expansion - Synonym graph-based query expansion per-shard</div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="label">Stage 8</div>
+                        <div class="content">Retrieval using Map-Reduce - Distributed lexical + semantic search</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="detailed-section">
+                <h3>5. Cybernaut-1: The AI Agent "Build"</h3>
+                <div class="build-context">
+                    <strong>Product Launch:</strong> "In the coming days we will launch our V2 search API which includes an algorithm called <span class="highlight-text">cybernaut-1</span>" (August 25, 2025).
+                </div>
+                <p>
+                    Cybernaut-1 represents the culmination of the entire infrastructure build: it's an AI agent with "unrestricted access to everything in NOSIBLE including every shard, algorithm, selector, reranker, and signal." It can "tune them on the fly" - meaning it's a reinforcement learner that designs and iterates on search policies.
+                </p>
+                <div class="build-context">
+                    <strong>Differentiator:</strong> "Other agentic searchers are flying blind. They only see top search results. Cybernaut-1 knows how they got there."
+                </div>
+            </div>
+
+            <div class="detailed-section">
+                <h3>6. The Broader Build Philosophy</h3>
+                <div class="build-context">
+                    <strong>Core Insight:</strong> "Building systems involves making trade-offs. How those trade-offs are decided cannot be disentangled from who your end user is."
+                </div>
+                <p>
+                    The article explicitly contrasts a system built for humans vs. one built for AIs:
+                </p>
+                <ul style="margin-left: 20px; margin-top: 10px; line-height: 1.8;">
+                    <li><strong>Human-optimized:</strong> Must be idiot-proof, handle spell-checking, personalization</li>
+                    <li><strong>AI-optimized:</strong> Must be "genius-friendly," maximize recall over precision, support multi-query inputs</li>
+                </ul>
+                <div class="build-context" style="margin-top: 15px;">
+                    <strong>Conclusion Quote:</strong> "Search engines are not aligned with AIs and AIs are paying the price. So, we are building the world's most AI-aligned search engine."
+                </div>
+            </div>
+
+            <div class="detailed-section">
+                <h3>Key Links & References in the Blog</h3>
+                <div style="margin-top: 15px;">
+                    <p><strong>External References (Open Source Libraries & Tools):</strong></p>
+                    <ul style="margin-left: 20px; margin-top: 10px; line-height: 1.8;">
+                        <li><a href="https://github.com/explosion/spaCy" target="_blank">SpaCy</a> - NLP framework for tokenization</li>
+                        <li><a href="https://github.com/nltk/nltk" target="_blank">NLTK</a> - Natural Language Toolkit</li>
+                        <li><a href="https://github.com/numpy/numpy" target="_blank">NumPy</a> - Numerical computing</li>
+                        <li><a href="https://github.com/pola-rs/polars" target="_blank">Polars</a> - Data processing</li>
+                        <li><a href="https://huggingface.co" target="_blank">Hugging Face</a> - ML models (E5 embeddings)</li>
+                        <li><a href="https://github.com/unum-cloud/usearch" target="_blank">USearch</a> - Vector search</li>
+                        <li><a href="https://github.com/ashvardanian/simsimd" target="_blank">SimSIMD</a> - Similarity computation</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Build References Analysis &copy; 2025 | Interactive visualization of Cybernaut-1 blog post</p>
+            <p style="margin-top: 10px; opacity: 0.8;">Source: https://nosible.ghost.io/the-road-to-cybernaut-1/</p>
+        </footer>
+    </div>
+
+    <script>
+        const references = [
+            {
+                id: 1,
+                category: 'philosophy',
+                keyword: 'built for people',
+                count: 2,
+                context: 'Search was "built for people" not for AI agents',
+                quote: 'The problem is that search was not built for them. It was built for us.'
+            },
+            {
+                id: 2,
+                category: 'philosophy',
+                keyword: 'built for advertisers',
+                count: 1,
+                context: 'Original design served advertiser interests',
+                quote: 'no, let\'s be honest - it was built for advertisers'
+            },
+            {
+                id: 3,
+                category: 'architecture',
+                keyword: 'building systems',
+                count: 1,
+                context: 'Core principle of trade-offs in system design',
+                quote: 'Building systems involves making trade-offs.'
+            },
+            {
+                id: 4,
+                category: 'architecture',
+                keyword: 'shards are learned',
+                count: 1,
+                context: 'Shards constructed via machine learning algorithm',
+                quote: 'Shards are learned using an efficient algorithm we developed'
+            },
+            {
+                id: 5,
+                category: 'architecture',
+                keyword: 'if you opened up a shard',
+                count: 1,
+                context: 'Architectural components within each shard',
+                quote: 'If you opened up a shard you would find...'
+            },
+            {
+                id: 6,
+                category: 'implementation',
+                keyword: 'multilingual tokenization',
+                count: 1,
+                context: 'Custom system built to handle multiple languages',
+                quote: 'Getting this to work equally well across many languages is difficult. We ended up creating a standardized interface'
+            },
+            {
+                id: 7,
+                category: 'architecture',
+                keyword: 'eight-stage retrieval pipeline',
+                count: 1,
+                context: 'Complex pipeline built to orchestrate search',
+                quote: 'Every question comes into NOSIBLE goes through a sophisticated eight-stage retrieval pipeline'
+            },
+            {
+                id: 8,
+                category: 'architecture',
+                keyword: 'bloom filter built',
+                count: 1,
+                context: 'Data structure built into each shard',
+                quote: 'Each shard has a bloom filter that keeps track of important phrases'
+            },
+            {
+                id: 9,
+                category: 'implementation',
+                keyword: 'LLM evolved templates',
+                count: 1,
+                context: 'Optimal instruction templates built via LLM optimization',
+                quote: 'we used an LLM to generate and "evolve" optimal instruction templates'
+            },
+            {
+                id: 10,
+                category: 'implementation',
+                keyword: 'vector search index we developed',
+                count: 1,
+                context: 'Custom Bayesian vector search built in-house',
+                quote: 'This selector is derived from a vector search index we developed that often beats SOTA'
+            },
+            {
+                id: 11,
+                category: 'philosophy',
+                keyword: 'must be genius-friendly',
+                count: 1,
+                context: 'Design philosophy for AI-optimized systems',
+                quote: 'AI search engines must be the opposite: genius-friendly.'
+            },
+            {
+                id: 12,
+                category: 'architecture',
+                keyword: 'rebuilding search for AI',
+                count: 3,
+                context: 'Main thesis: complete reconstruction for AI agents',
+                quote: 'The Road to Cybernaut-1: Rebuilding Search for AI'
+            },
+            {
+                id: 13,
+                category: 'implementation',
+                keyword: 'cybernaut-1 unrestricted access',
+                count: 1,
+                context: 'AI agent with access to all infrastructure components',
+                quote: 'Cybernaut-1 is an AI agent with unrestricted access to everything in NOSIBLE'
+            },
+            {
+                id: 14,
+                category: 'philosophy',
+                keyword: 'building the worlds most AI-aligned',
+                count: 1,
+                context: 'Mission statement about building AI-first search',
+                quote: 'we are building the worlds most AI-aligned search engine'
+            },
+            {
+                id: 15,
+                category: 'philosophy',
+                keyword: 'search is a scaling law',
+                count: 1,
+                context: 'Broader vision: search as infrastructure for AI scaling',
+                quote: 'At NOSIBLE we believe that search is a scaling law on par with data or compute'
+            }
+        ];
+
+        function filterReferences(category) {
+            const buttons = document.querySelectorAll('.filter-btn');
+            buttons.forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            const list = document.getElementById('references-list');
+            list.innerHTML = '';
+
+            const filtered = category === 'all' ? references : references.filter(ref => ref.category === category);
+
+            filtered.forEach(ref => {
+                const item = document.createElement('div');
+                item.className = 'reference-item';
+                item.innerHTML = `
+                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                        <span class="ref-count">#${ref.id}</span>
+                        <strong>${ref.keyword}</strong>
+                    </div>
+                    <div class="ref-text">${ref.context}</div>
+                    <div class="ref-quote">"${ref.quote}"</div>
+                    <div class="connection-info">Category: <strong>${ref.category}</strong> | Mentions: <strong>${ref.count}</strong></div>
+                `;
+                item.addEventListener('click', () => highlightNode(ref.keyword));
+                list.appendChild(item);
+            });
+        }
+
+        function highlightNode(keyword) {
+            const nodes = document.querySelectorAll('.node');
+            nodes.forEach(node => {
+                if (node.textContent.toLowerCase().includes(keyword.toLowerCase())) {
+                    node.classList.add('highlight');
+                } else {
+                    node.classList.remove('highlight');
+                }
+            });
+        }
+
+        function initializeNetwork() {
+            const network = document.getElementById('network');
+            const topics = [
+                'Search Rebuilt',
+                'Shards (250K)',
+                'Tokenization',
+                'Embedding',
+                'Shard Selection',
+                'Reranking',
+                'Cybernaut-1',
+                'Pipeline',
+                'AI-Optimized',
+                'Hybrid Search'
+            ];
+
+            topics.forEach(topic => {
+                const node = document.createElement('div');
+                node.className = 'node';
+                node.textContent = topic;
+                node.addEventListener('click', () => {
+                    node.classList.toggle('highlight');
+                });
+                network.appendChild(node);
+            });
+        }
+
+        // Initialize on load
+        window.addEventListener('DOMContentLoaded', () => {
+            filterReferences('all');
+            initializeNetwork();
+        });
+    </script>
+</body>
+</html>
