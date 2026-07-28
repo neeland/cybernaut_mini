@@ -8,6 +8,7 @@ wraps E5-style models and is the quality option; it may download weights on firs
 from __future__ import annotations
 
 import hashlib
+import os
 from typing import Protocol
 
 import numpy as np
@@ -79,16 +80,26 @@ class HashEmbedder:
 
 
 class SentenceTransformersEmbedder:
-    """sentence-transformers wrapper with E5 ``query:``/``passage:`` prefixes."""
+    """sentence-transformers wrapper with E5 ``query:``/``passage:`` prefixes.
 
-    def __init__(self, model_name: str) -> None:
+    Constructing this downloads the weights on first use. The download is pinned to
+    ``revision`` when one is given and authenticated with ``HF_TOKEN`` when present,
+    so a private or gated model works without a separate login step.
+    """
+
+    def __init__(self, model_name: str, revision: str | None = None) -> None:
         try:
             from sentence_transformers import SentenceTransformer
         except ImportError as exc:
             msg = "sentence-transformers is not installed; install the [st] extra"
             raise ConfigError(msg) from exc
         self._model_name = model_name
-        self._model = SentenceTransformer(model_name)
+        self._revision = revision
+        self._model = SentenceTransformer(
+            model_name,
+            revision=revision,
+            token=os.environ.get("HF_TOKEN") or None,
+        )
         self._is_e5 = "e5" in model_name.lower()
 
     @property
@@ -122,4 +133,4 @@ def create_embedding_provider(
             "download; use provider 'hash'"
         )
         raise ConfigError(msg)
-    return SentenceTransformersEmbedder(config.model)
+    return SentenceTransformersEmbedder(config.model, revision=config.revision)

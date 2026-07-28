@@ -26,7 +26,24 @@ class EmbeddingConfig(BaseModel):
 
     provider: Literal["hash", "sentence_transformers"] = "sentence_transformers"
     model: str = "intfloat/multilingual-e5-small"
+    revision: str | None = Field(
+        default=None,
+        description=(
+            "Commit SHA or tag of the model weights. None resolves to the repo's "
+            "default branch and is not reproducible; pin it for production builds."
+        ),
+    )
     dim: int = Field(default=256, ge=8, description="Vector size for the hash provider")
+
+    def is_pinned(self) -> bool:
+        """True when this configuration identifies exactly one set of weights."""
+        if self.provider == "hash":
+            # The hash embedder is pure code — no weights to drift.
+            return True
+        revision = self.revision
+        if revision is None:
+            return False
+        return revision.strip().lower() not in {"main", "master", "head"}
 
 
 class IndexConfig(BaseModel):
@@ -73,6 +90,21 @@ class AppConfig(BaseModel):
             msg = (
                 "offline mode: embedding provider 'sentence_transformers' may require a "
                 "model download; use provider 'hash' (e.g. configs/tiny.yaml)"
+            )
+            raise ConfigError(msg)
+
+    def require_reproducible(self) -> None:
+        """Reject configurations that cannot be rebuilt to the same bytes later.
+
+        An index is only reproducible from ``(corpus, config, seed)`` if the weights
+        that produced its vectors are pinned. Enforced for production builds, where
+        an unnoticed weight change would silently invalidate every stored vector.
+        """
+        if not self.embedding.is_pinned():
+            msg = (
+                f"embedding model {self.embedding.model!r} is not pinned "
+                f"(revision={self.embedding.revision!r}); set embedding.revision to a "
+                f"commit SHA so the index can be rebuilt byte-for-byte"
             )
             raise ConfigError(msg)
 

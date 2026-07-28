@@ -50,7 +50,9 @@ def provider_from_meta(meta: IndexMeta, *, offline: bool = False) -> EmbeddingPr
         raise ConfigError(msg)
     from cybernaut_mini.providers.embeddings import SentenceTransformersEmbedder
 
-    return SentenceTransformersEmbedder(meta.embedding_model)
+    # Reuse the build-time revision so query vectors come from the same weights
+    # as the stored document vectors.
+    return SentenceTransformersEmbedder(meta.embedding_model, revision=meta.embedding_revision)
 
 
 # ------------------------------------------------------------------ #

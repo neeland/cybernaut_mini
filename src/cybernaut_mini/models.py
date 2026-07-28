@@ -145,6 +145,11 @@ class IndexMeta(BaseModel):
 
     artifact_version: str = ARTIFACT_VERSION
     embedding_model: str
+    #: Weights revision used at build time. Queries must embed with the same
+    #: revision or their vectors are not comparable to the stored ones.
+    #: None means the build did not pin one (indexes written before this field
+    #: existed also load as None).
+    embedding_revision: str | None = None
     embedding_dim: int
     n_shards: int
     n_documents: int
