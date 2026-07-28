@@ -1,6 +1,7 @@
 .PHONY: install install-prod env test lint typecheck check \
 	build-sample search-sample eval-sample \
-	ingest ingest-prod build-prod eval-pipeline viz pipelines
+	ingest ingest-prod build-prod eval-pipeline viz pipelines \
+	notebooks lab
 
 install: env
 	uv sync
@@ -69,3 +70,16 @@ eval-pipeline:
 
 viz:
 	uv run kedro viz
+
+# ------------------------------------------------------------------ #
+# Notebooks                                                           #
+# ------------------------------------------------------------------ #
+
+# Execute every notebook headlessly against the real catalog. Also run as part of
+# `make check`, so a notebook cannot silently drift off the pipeline.
+notebooks:
+	uv run pytest tests/test_notebooks.py -q
+
+# JupyterLab with catalog/context/session/pipelines pre-injected (port 8888).
+lab:
+	scripts/lab.sh

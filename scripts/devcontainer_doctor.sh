@@ -47,6 +47,38 @@ command -v uv >/dev/null 2>&1 \
   && ok ".venv ($(.venv/bin/python --version 2>&1))" \
   || bad ".venv missing" "uv sync --extra viz"
 
+# ------------------------------------------------------------------ #
+# Project checks — the pieces a from-scratch build must also produce  #
+# ------------------------------------------------------------------ #
+
+if [ -x .venv/bin/python ]; then
+  # Kedro discovers project commands at cybernaut_mini.cli:cli. If that Click
+  # group goes missing, every `kedro` subcommand dies with "Cannot load commands"
+  # while the Typer CLI keeps working — so check the kedro side explicitly.
+  .venv/bin/python -m kedro registry list >/dev/null 2>&1 \
+    && ok "kedro CLI loads ($(.venv/bin/python -m kedro registry list 2>/dev/null | grep -c '^-') pipelines registered)" \
+    || bad "kedro CLI cannot load project commands" "check cybernaut_mini.cli exposes a Click group named 'cli'"
+
+  # Notebooks are executed by the test suite, which needs a resolvable kernel.
+  .venv/bin/python -c "
+from jupyter_client.kernelspec import KernelSpecManager
+raise SystemExit(0 if 'python3' in KernelSpecManager().find_kernel_specs() else 1)
+" >/dev/null 2>&1 \
+    && ok "jupyter python3 kernelspec (notebooks executable)" \
+    || bad "no python3 kernelspec" "uv sync --extra viz   (installs ipykernel from the dev group)"
+
+  # The catalog is the project's only data entry point; a broken one breaks
+  # every pipeline and every notebook at once.
+  .venv/bin/python -c "
+from cybernaut_mini.notebook import kedro_catalog
+required = {'documents', 'judgments', 'shard_index', 'raw_corpus', 'raw_corpus_source'}
+missing = required - set(kedro_catalog().keys())
+raise SystemExit(1 if missing else 0)
+" >/dev/null 2>&1 \
+    && ok "Kedro catalog resolves all core datasets" \
+    || bad "catalog is missing core datasets" "check conf/base/catalog.yml"
+fi
+
 if [ "$FAIL" -eq 0 ]; then
   echo "all checks passed"
 else
