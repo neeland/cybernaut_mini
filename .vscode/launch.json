@@ -1,0 +1,246 @@
+{
+  // Debug configurations — one per `kedro run` target registered in
+  // src/cybernaut_mini/pipeline_registry.py, plus the Typer CLI entry points.
+  //
+  // All of them run `python -m kedro` under debugpy with `justMyCode: false`, so
+  // breakpoints land inside node functions, custom datasets, and the hooks — not
+  // just in files you have open.
+  //
+  // Offline-safe configs pass `embedding.provider=hash`, which needs no model
+  // download and no optional extras. Configs marked (needs extras) require
+  // `uv sync --extra hf --extra st` and network access.
+  "version": "0.2.0",
+  "inputs": [
+    {
+      "id": "pipeline",
+      "type": "pickString",
+      "description": "Which pipeline to run?",
+      "options": [
+        "__default__",
+        "corpus_ingest",
+        "index_build",
+        "evaluation",
+        "production"
+      ],
+      "default": "index_build"
+    },
+    {
+      "id": "kedroEnv",
+      "type": "pickString",
+      "description": "Which Kedro config environment?",
+      "options": ["local", "prod"],
+      "default": "local"
+    },
+    {
+      "id": "extraParams",
+      "type": "promptString",
+      "description": "Extra --params (comma-separated key=value, or leave blank)",
+      "default": "embedding.provider=hash,embedding.dim=256"
+    }
+  ],
+  "configurations": [
+    {
+      "name": "kedro run: corpus_ingest (raw -> intermediate -> primary)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "kedro",
+      "args": ["run", "--pipeline", "corpus_ingest"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": false
+    },
+    {
+      "name": "kedro run: index_build (offline, hash embedder)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "kedro",
+      "args": [
+        "run",
+        "--pipeline",
+        "index_build",
+        "--params",
+        "embedding.provider=hash,embedding.dim=256,index.n_shards=8,offline=true"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": false
+    },
+    {
+      "name": "kedro run: index_build (sample corpus -> artifacts/sample)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "kedro",
+      "args": [
+        "run",
+        "--pipeline",
+        "index_build",
+        "--params",
+        "input_path=data/sample/documents.jsonl,index_path=artifacts/sample,embedding.provider=hash,embedding.dim=256,index.n_shards=8,offline=true"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": false
+    },
+    {
+      "name": "kedro run: evaluation (sample index + sample judgments)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "kedro",
+      "args": [
+        "run",
+        "--pipeline",
+        "evaluation",
+        "--params",
+        "index_path=artifacts/sample,judgments_path=data/sample/judgments.jsonl,embedding.provider=hash,embedding.dim=256,offline=true"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": false
+    },
+    {
+      "name": "kedro run: production (offline, hash embedder)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "kedro",
+      "args": [
+        "run",
+        "--pipeline",
+        "production",
+        "--params",
+        "embedding.provider=hash,embedding.dim=256,index.n_shards=8,index_path=artifacts/demo,offline=true"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": false
+    },
+    {
+      "name": "kedro run: production --env prod (needs extras + HF_TOKEN)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "kedro",
+      "args": ["run", "--pipeline", "production", "--env", "prod"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "envFile": "${workspaceFolder}/.env",
+      "justMyCode": false
+    },
+    {
+      "name": "kedro run: __default__",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "kedro",
+      "args": [
+        "run",
+        "--params",
+        "embedding.provider=hash,embedding.dim=256,offline=true"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": false
+    },
+    {
+      "name": "kedro run: pick pipeline + env + params",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "kedro",
+      "args": [
+        "run",
+        "--pipeline",
+        "${input:pipeline}",
+        "--env",
+        "${input:kedroEnv}",
+        "--params",
+        "${input:extraParams}"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "envFile": "${workspaceFolder}/.env",
+      "justMyCode": false
+    },
+    {
+      "name": "kedro: registry list (which pipelines exist)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "kedro",
+      "args": ["registry", "list"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": false
+    },
+    {
+      "name": "CLI: build (sample, tiny config)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "cybernaut_mini.cli",
+      "args": [
+        "build",
+        "--input",
+        "data/sample/documents.jsonl",
+        "--index",
+        "artifacts/sample",
+        "--config",
+        "configs/tiny.yaml"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": false
+    },
+    {
+      "name": "CLI: search (hybrid, sample index)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "cybernaut_mini.cli",
+      "args": [
+        "search",
+        "--index",
+        "artifacts/sample",
+        "--mode",
+        "hybrid",
+        "--question",
+        "What links gut bacteria to immune response?"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": false
+    },
+    {
+      "name": "CLI: eval (sample index + judgments)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "cybernaut_mini.cli",
+      "args": [
+        "eval",
+        "--index",
+        "artifacts/sample",
+        "--judgments",
+        "data/sample/judgments.jsonl"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": false
+    },
+    {
+      "name": "pytest: current file",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["${file}", "-vv"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": false
+    }
+  ]
+}
