@@ -1,3 +1,73 @@
-# Artifact catalog. Build/eval pipelines mostly use in-memory datasets plus the
-# index writer node, which persists via cybernaut_mini.indexing (canonical JSON + npy).
-# Entries here are for artifacts addressable directly by `kedro run` users.
+# Data catalog — the single place that knows where data lives.
+#
+# Every corpus and index path in the project is declared here rather than opened
+# inside a node, so `kedro viz` renders true lineage and swapping a local corpus
+# for a Hugging Face one is a config change (`--env prod`), not a code change.
+#
+# Layers follow the Kedro convention:
+#   01_raw          verbatim source rows, exactly as fetched
+#   02_intermediate mapped onto the Document schema
+#   03_primary      filtered and capped: the corpus a build actually consumes
+#   08_reporting    evaluation output
+#
+# `${runtime_params:name,default}` lets the Typer CLI keep its --input / --index
+# flags: those flags are forwarded as Kedro runtime params and resolve here.
+
+# ------------------------------------------------------------------ #
+# 01_raw — acquisition                                                #
+# ------------------------------------------------------------------ #
+
+# Default source is a local file so `kedro run --pipeline corpus_ingest` never
+# touches the network unless the prod environment overrides it.
+raw_corpus_source:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: ${runtime_params:raw_source_path,data/01_raw/corpus_source.jsonl}
+
+raw_corpus:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/01_raw/corpus_snapshot.jsonl
+
+# ------------------------------------------------------------------ #
+# 02_intermediate — normalised to the Document schema                 #
+# ------------------------------------------------------------------ #
+
+normalized_documents:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/02_intermediate/documents.jsonl
+
+# ------------------------------------------------------------------ #
+# 03_primary — the build-ready corpus                                 #
+# ------------------------------------------------------------------ #
+
+# corpus_ingest WRITES this and index_build reads it, so its default must be a
+# generated path. It must never default into data/sample/: that directory holds a
+# committed fixture, and an acquisition run would overwrite it.
+# Sample builds reach the fixture by passing it explicitly —
+# `cybernaut-mini build --input data/sample/documents.jsonl` — which arrives here
+# as the input_path runtime param.
+documents:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: ${runtime_params:input_path,data/03_primary/corpus.jsonl}
+
+judgments:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: ${runtime_params:judgments_path,data/sample/judgments.jsonl}
+
+# ------------------------------------------------------------------ #
+# The index                                                           #
+# ------------------------------------------------------------------ #
+
+# One catalog entry for the whole index directory. `save` performs the canonical
+# write (`_VALID` last); `load` returns a query-ready LoadedIndex, which is how
+# the evaluation pipeline consumes it.
+shard_index:
+  type: cybernaut_mini.datasets.ShardIndexDataset
+  filepath: ${runtime_params:index_path,artifacts/sample}
+
+# ------------------------------------------------------------------ #
+# 08_reporting                                                        #
+# ------------------------------------------------------------------ #
+
+eval_report:
+  type: cybernaut_mini.datasets.CanonicalJsonDataset
+  filepath: data/08_reporting/eval_report.json

@@ -14,3 +14,14 @@ dist/
 conf/local/*
 !conf/local/.gitkeep
 .viz/
+
+# Kedro data layers. Fetched and derived corpora are rebuildable from a pinned
+# source, so they are never committed; data/sample and data/00_reference are.
+data/01_raw/*
+!data/01_raw/.gitkeep
+data/02_intermediate/*
+!data/02_intermediate/.gitkeep
+data/03_primary/*
+!data/03_primary/.gitkeep
+data/08_reporting/*
+!data/08_reporting/.gitkeep

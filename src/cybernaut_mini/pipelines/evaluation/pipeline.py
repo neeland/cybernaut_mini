@@ -6,9 +6,8 @@ from kedro.pipeline import Pipeline, node, pipeline
 
 from cybernaut_mini.pipelines.evaluation.nodes import (
     evaluate_node,
-    load_index_node,
-    load_judgments_node,
     report_node,
+    validate_judgments,
 )
 
 
@@ -17,21 +16,15 @@ def create_pipeline() -> Pipeline:
     return pipeline(
         [
             node(
-                func=load_index_node,
-                inputs=["params:index_path"],
-                outputs="validated_index_path",
-                name="load_index_node",
-            ),
-            node(
-                func=load_judgments_node,
-                inputs=["params:judgments_path"],
+                func=validate_judgments,
+                inputs="judgments",
                 outputs="judgments_list",
-                name="load_judgments_node",
+                name="validate_judgments",
             ),
             node(
                 func=evaluate_node,
                 inputs=[
-                    "validated_index_path",
+                    "shard_index",
                     "judgments_list",
                     "params:embedding",
                     "params:rrf",

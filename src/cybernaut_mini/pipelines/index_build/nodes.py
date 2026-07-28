@@ -3,11 +3,14 @@
 Each function accepts and returns plain Python objects (dicts, lists, str) so
 Kedro can pass them through its in-memory dataset layer without custom pickling.
 Heavy objects (numpy arrays, pydantic models) are converted at node boundaries.
+
+No node performs file I/O: the corpus arrives from the catalog's ``documents``
+dataset and the finished index leaves as a payload dict that
+:class:`~cybernaut_mini.datasets.ShardIndexDataset` writes.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -19,9 +22,8 @@ from cybernaut_mini.indexing import (
     compute_entities,
     compute_keywords,
     compute_term_graph,
-    write_index,
 )
-from cybernaut_mini.ingest import load_documents
+from cybernaut_mini.ingest import validate_records
 from cybernaut_mini.models import (
     Document,
     IndexMeta,
@@ -32,12 +34,19 @@ from cybernaut_mini.sharding import shard_documents
 from cybernaut_mini.text import TextProcessor
 
 
-def ingest_documents(input_path: str) -> list[dict[str, Any]]:
-    """Load and validate documents from a JSONL file.
+def ingest_documents(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Validate the catalog-supplied corpus before anything expensive runs.
+
+    The catalog has already parsed the JSONL; this enforces the Document schema
+    and the no-duplicate-ids rule, so a malformed corpus fails before the
+    embedding step rather than part-way through it.
 
     Returns a list of model dicts (model_dump output) for downstream nodes.
     """
-    docs = load_documents(Path(input_path))
+    if not documents:
+        msg = "corpus is empty; nothing to index"
+        raise ValueError(msg)
+    docs = validate_records(list(enumerate(documents, start=1)), label="record")
     return [doc.model_dump(mode="json") for doc in docs]
 
 
@@ -187,20 +196,22 @@ def build_manifests(
     return manifests
 
 
-def write_index_node(
+def build_index_payload(
     documents: list[dict[str, Any]],
     vectors_list: list[list[float]],
     manifests_list: list[dict[str, Any]],
     text_result: dict[str, Any],
-    index_path: str,
     embedding_params: dict[str, Any],
     seed: int,
-) -> str:
-    """Persist the index to disk and return the index_path string."""
-    docs = [Document.model_validate(raw) for raw in documents]
+) -> dict[str, Any]:
+    """Assemble the complete index as a plain payload for the catalog to persist.
+
+    Returns the dict consumed by :class:`~cybernaut_mini.datasets.ShardIndexDataset`,
+    whose ``save`` performs the canonical write. The node itself touches no path,
+    so the index location is a catalog concern and swapping it per environment
+    needs no code change.
+    """
     vectors = np.array(vectors_list, dtype=np.float32)
-    manifests = [ShardManifest.model_validate(raw) for raw in manifests_list]
-    doc_tokens: dict[str, list[str]] = text_result["tokens"]
 
     embedding_config = EmbeddingConfig.model_validate(embedding_params)
     embedding_model = (
@@ -209,22 +220,21 @@ def write_index_node(
         else f"hash-{embedding_config.dim}"
     )
 
-    n_shards = len(manifests)
     meta = IndexMeta(
         embedding_model=embedding_model,
+        embedding_revision=(
+            embedding_config.revision if embedding_config.provider != "hash" else None
+        ),
         embedding_dim=vectors.shape[1],
-        n_shards=n_shards,
-        n_documents=len(docs),
+        n_shards=len(manifests_list),
+        n_documents=len(documents),
         seed=seed,
     )
 
-    write_index(
-        Path(index_path),
-        meta=meta,
-        documents=docs,
-        vectors=vectors,
-        manifests=manifests,
-        doc_tokens=doc_tokens,
-    )
-
-    return index_path
+    return {
+        "meta": meta.model_dump(mode="json"),
+        "documents": documents,
+        "vectors": vectors_list,
+        "manifests": manifests_list,
+        "doc_tokens": text_result["tokens"],
+    }

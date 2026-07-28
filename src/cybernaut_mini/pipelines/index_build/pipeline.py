@@ -5,12 +5,12 @@ from __future__ import annotations
 from kedro.pipeline import Pipeline, node, pipeline
 
 from cybernaut_mini.pipelines.index_build.nodes import (
+    build_index_payload,
     build_manifests,
     embed_documents,
     ingest_documents,
     process_text,
     shard,
-    write_index_node,
 )
 
 
@@ -20,7 +20,7 @@ def create_pipeline() -> Pipeline:
         [
             node(
                 func=ingest_documents,
-                inputs=["params:input_path"],
+                inputs=["documents"],
                 outputs="raw_documents",
                 name="ingest_documents",
             ),
@@ -56,18 +56,17 @@ def create_pipeline() -> Pipeline:
                 name="build_manifests",
             ),
             node(
-                func=write_index_node,
+                func=build_index_payload,
                 inputs=[
                     "raw_documents",
                     "vectors_list",
                     "manifests_list",
                     "text_result",
-                    "params:index_path",
                     "params:embedding",
                     "params:seed",
                 ],
-                outputs="index_path_out",
-                name="write_index_node",
+                outputs="shard_index",
+                name="build_index_payload",
             ),
         ]
     )

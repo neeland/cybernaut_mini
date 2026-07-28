@@ -1,74 +1,53 @@
 """Pure-function Kedro nodes for the evaluation pipeline.
 
-Each function accepts and returns plain Python objects so Kedro can pass
-them through its in-memory dataset layer without custom pickling.
-Heavy objects (LoadedIndex, TextProcessor, EmbeddingProvider) are constructed
-inside the node so they are never serialised.
+The index arrives already loaded from ``ShardIndexDataset`` and the judgments from
+a ``JsonlDataset``, so no node opens a path. Derived objects that are expensive but
+cheap to rebuild (``TextProcessor``, ``EmbeddingProvider``) are constructed inside
+the node rather than passed between them, so nothing large crosses a dataset boundary.
 
 Node sequence
 -------------
-load_index_node   -> loaded_index_path (passes the path string through)
-load_judgments_node -> judgments_list (list of Judgment dicts)
-evaluate_node     -> metrics_list (list of ModeMetrics dicts)
-report_node       -> report_dict (structured summary)
+validate_judgments -> judgments_list (list of Judgment dicts)
+evaluate_node      -> metrics_list (list of ModeMetrics dicts)
+report_node        -> eval_report (structured summary, persisted by the catalog)
 """
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-
-def load_index_node(index_path: str) -> str:
-    """Validate that the index at ``index_path`` is loadable and return the path.
-
-    Raises :class:`~cybernaut_mini.indexing.IndexLoadError` if the index is
-    incomplete (missing ``_VALID`` marker or required artifact files).
-    """
+if TYPE_CHECKING:
     from cybernaut_mini.indexing import LoadedIndex
 
-    # Eagerly validate by loading — this also warms up the BM25 index.
-    # We return the path string so Kedro doesn't need to serialise LoadedIndex.
-    LoadedIndex.load(Path(index_path))
-    return index_path
 
+def validate_judgments(judgments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Validate catalog-supplied judgment records.
 
-def load_judgments_node(judgments_path: str) -> list[dict[str, Any]]:
-    """Read a JSONL file of :class:`~cybernaut_mini.models.Judgment` records.
-
-    Returns a list of validated Judgment model dicts.
-    Raises :exc:`ValueError` naming the offending line on any validation error.
+    Raises :exc:`ValueError` naming the offending record on any validation error.
     """
     from pydantic import ValidationError
 
     from cybernaut_mini.models import Judgment
 
-    path = Path(judgments_path)
+    if not judgments:
+        msg = "judgments file contained no records; cannot evaluate"
+        raise ValueError(msg)
+
     records: list[dict[str, Any]] = []
-    with path.open(encoding="utf-8") as fh:
-        for lineno, raw_line in enumerate(fh, start=1):
-            line = raw_line.strip()
-            if not line:
-                continue
-            try:
-                raw = json.loads(line)
-            except json.JSONDecodeError as exc:
-                msg = f"judgments line {lineno}: invalid JSON — {exc}"
-                raise ValueError(msg) from exc
-            try:
-                j = Judgment.model_validate(raw)
-            except (ValidationError, ValueError) as exc:
-                qid = raw.get("query_id") if isinstance(raw, dict) else None
-                label = f"query_id={qid!r}" if qid else f"line {lineno}"
-                msg = f"judgments {label}: {exc}"
-                raise ValueError(msg) from exc
-            records.append(j.model_dump(mode="json"))
+    for position, raw in enumerate(judgments, start=1):
+        try:
+            j = Judgment.model_validate(raw)
+        except (ValidationError, ValueError) as exc:
+            qid = raw.get("query_id") if isinstance(raw, dict) else None
+            label = f"query_id={qid!r}" if qid else f"record {position}"
+            msg = f"judgments {label}: {exc}"
+            raise ValueError(msg) from exc
+        records.append(j.model_dump(mode="json"))
     return records
 
 
 def evaluate_node(
-    index_path: str,
+    index: LoadedIndex,
     judgments_list: list[dict[str, Any]],
     embedding_params: dict[str, Any],
     rrf_params: dict[str, Any],
@@ -77,19 +56,13 @@ def evaluate_node(
     offline: bool,
     modes: list[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Run all four retrieval modes over judgments and return metrics dicts.
-
-    Constructs ``LoadedIndex``, ``TextProcessor``, and ``EmbeddingProvider``
-    inside the node. Uses ``evals.evaluate`` for metric computation.
-    """
+    """Run all four retrieval modes over judgments and return metrics dicts."""
     from cybernaut_mini.config import AgentConfig, AppConfig, EmbeddingConfig, RRFConfig
     from cybernaut_mini.evals import evaluate
-    from cybernaut_mini.indexing import LoadedIndex
     from cybernaut_mini.models import Judgment
     from cybernaut_mini.retrieval import provider_from_meta
     from cybernaut_mini.text import TextProcessor
 
-    index = LoadedIndex.load(Path(index_path))
     judgments = [Judgment.model_validate(j) for j in judgments_list]
 
     embedding_config = EmbeddingConfig.model_validate(embedding_params)

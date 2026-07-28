@@ -1,9 +1,18 @@
 # Kedro-side defaults; mirror configs/default.yaml. The Typer CLI passes the chosen
 # configs/*.yaml as extra_params, which override these at run time.
+#
+# Paths are NOT parameters any more — they live in conf/base/catalog.yml and are
+# overridden per run via `${runtime_params:...}` (the CLI's --input / --index flags)
+# or per environment via `--env prod`.
 seed: 42
 embedding:
   provider: sentence_transformers
   model: intfloat/multilingual-e5-small
+  # Commit SHA of the model weights. null resolves to the repo's default branch,
+  # which is fine locally but not reproducible: two builds months apart can embed
+  # with different tensors and silently yield a different index from one corpus.
+  # Production builds must pin it — see conf/prod/parameters.yml.
+  revision: null
   dim: 256
 index:
   n_shards: 12
@@ -22,8 +31,27 @@ agent:
   max_retrieval_calls: 18
   judge: heuristic
   query_generator: heuristic
-# Filled in by the CLI (or kedro run --params) per invocation.
-input_path: data/sample/documents.jsonl
-index_path: artifacts/sample
-judgments_path: data/sample/judgments.jsonl
+
+# ------------------------------------------------------------------ #
+# corpus_ingest                                                       #
+# ------------------------------------------------------------------ #
+
+# How raw source rows map onto the Document schema. Retarget a different source by
+# changing this mapping, not the normaliser.
+corpus:
+  field_map:
+    text: text
+    url: url
+  metadata_fields: []
+  default_language: en
+  id_prefix: doc
+  min_text_chars: 32
+
+# Narrowing applied between the intermediate and primary layers.
+corpus_selection:
+  languages: null
+  metadata_equals: null
+  max_documents: null
+
+# Set by the CLI (or `kedro run --params offline=true`) per invocation.
 offline: false
