@@ -1,0 +1,17 @@
+examine @../numerai/ and get any additional api keys from that repo so that i can use some of the mcp tools. set that up in this repo and set up so it automatically builds
+
+---
+
+also include mcp scripts from here and copy nosible key into .env here @../nosible-py/
+
+---
+
+use exa and the fact that this was the nosible blog this repo was built on https://nosible.com/blog/the-road-to-cybernaut-1 ;;; find any useful nosible blogs that could help reverse engineer any of their tech; keep the blog as an md and then do a similar build-guide doc ;;;; i want to reverse engineer ANY TECH THEY MAKE PUBLIC for educational purposes /effort max
+
+---
+
+what tooling can help huggingface, github intergration mcps? skills?
+
+---
+
+1. Set up so that devcontainer builds witha these mcps and add keys needed to .env and .env.example
