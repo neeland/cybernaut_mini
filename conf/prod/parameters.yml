@@ -1,0 +1,35 @@
+# Production parameter overrides. Merged over conf/base/parameters.yml.
+
+embedding:
+  provider: sentence_transformers
+  model: intfloat/multilingual-e5-small
+  # REQUIRED in this environment. Left unset deliberately: a made-up SHA would be
+  # worse than no SHA. ReproducibilityHooks aborts a --env prod run while this is
+  # null, naming this file. Resolve the real value once, then paste it here:
+  #   uv run python -c "from huggingface_hub import HfApi; \
+  #     print(HfApi().model_info('intfloat/multilingual-e5-small').sha)"
+  revision: null
+
+index:
+  # Shard count drives serving cost: too few and each shard is slow to search,
+  # too many and routing dominates. ~2k documents per shard at this scale.
+  n_shards: 64
+  max_keywords: 50
+  max_entities: 50
+  cooccurrence_window: 5
+  min_edge_count: 3
+
+# Field mapping for the NOSIBLE HF datasets: text / label / netloc / url.
+corpus:
+  field_map:
+    text: text
+    url: url
+  metadata_fields: [label, netloc]
+  default_language: en
+  id_prefix: pred
+  min_text_chars: 120
+
+corpus_selection:
+  languages: [en]
+  metadata_equals: null
+  max_documents: null

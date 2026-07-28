@@ -1,0 +1,41 @@
+# Production catalog overrides: `kedro run --env prod --pipeline production`.
+#
+# Only the acquisition source changes. Every downstream entry is inherited from
+# conf/base/catalog.yml unchanged, which is the point of routing data through the
+# catalog: the pipeline code that builds a 100k-document shard is the same code
+# that builds the 66-document sample.
+#
+# Requires the `hf` extra:  uv sync --extra hf --extra st
+# Private/gated repos additionally need HF_TOKEN in the environment.
+
+raw_corpus_source:
+  type: cybernaut_mini.datasets.HuggingFaceDataset
+  repo_id: NOSIBLE/prediction
+  # REQUIRED: an immutable commit SHA or tag. Branch names and this placeholder
+  # are both rejected at load time, so an unpinned corpus cannot reach a build.
+  # Resolve the real SHA once, then paste it here:
+  #   uv run python -c "from huggingface_hub import HfApi; \
+  #     print(HfApi().dataset_info('NOSIBLE/prediction').sha)"
+  revision: REPLACE_WITH_COMMIT_SHA
+  split: train
+  columns: [text, label, netloc, url]
+  # Cap the pull while dialling in the build; remove for the full 100k rows.
+  max_rows: 20000
+
+# Keep production artifacts out of the sample paths so a prod run can never
+# overwrite the committed sample index.
+raw_corpus:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/01_raw/prediction_snapshot.jsonl
+
+normalized_documents:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/02_intermediate/prediction_documents.jsonl
+
+documents:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: ${runtime_params:input_path,data/03_primary/prediction_corpus.jsonl}
+
+shard_index:
+  type: cybernaut_mini.datasets.ShardIndexDataset
+  filepath: ${runtime_params:index_path,artifacts/prediction}
