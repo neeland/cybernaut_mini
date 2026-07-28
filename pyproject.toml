@@ -32,6 +32,12 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.10",
     "types-PyYAML",
+    # Notebook execution. The notebooks are executed by the test suite against the
+    # real catalog, so a renamed dataset or changed node signature fails the build
+    # instead of leaving a notebook that silently no longer runs.
+    "ipykernel>=6.29",
+    "nbclient>=0.10",
+    "nbformat>=5.10",
 ]
 
 [build-system]
