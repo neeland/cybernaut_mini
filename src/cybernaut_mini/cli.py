@@ -1,4 +1,17 @@
-"""Typer CLI. Commands are added milestone by milestone; M1 ships the app shell."""
+"""Typer CLI. Commands are added milestone by milestone; M1 ships the app shell.
+
+Two entry points share this module:
+
+``app``
+    The Typer application behind the ``cybernaut-mini`` console script — the
+    task-oriented interface (build, search, eval).
+``cli``
+    An empty Click group that the ``kedro`` executable discovers here. Kedro
+    requires a Click group at ``<package>.cli:cli`` and merges its own commands
+    into it; without one, ``kedro run`` / ``catalog`` / ``registry`` / ``viz``
+    all abort with "Cannot load commands". Keeping it empty means Kedro's
+    commands stay exactly as Kedro defines them.
+"""
 
 from __future__ import annotations
 
@@ -6,11 +19,17 @@ import json
 from pathlib import Path
 from typing import Annotated
 
+import click
 import typer
 
 from cybernaut_mini import __version__
 
 app = typer.Typer(name="cybernaut-mini", no_args_is_help=True, add_completion=False)
+
+
+@click.group(name="cybernaut-mini")
+def cli() -> None:
+    """Project command group discovered by the ``kedro`` executable."""
 
 
 @app.callback()
