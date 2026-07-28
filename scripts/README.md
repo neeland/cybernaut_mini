@@ -12,6 +12,8 @@ flowchart TD
     S --> ML["mlflow/<br/>experiment tracking"]
     S --> DEV["dev/<br/>quality + container"]
     S --> CL["claude/<br/>local-model env"]
+    S --> ENT["entire_setup.sh<br/>session capture CLI + hooks"]
+    S --> DOC["devcontainer_doctor.sh<br/>verify the container"]
 
     UV --> UV1["setup.sh — bootstrap (uv sync + arch + pre-commit)"]
     UV --> UV2["lock.sh — refresh uv.lock + requirements.txt"]
@@ -36,6 +38,8 @@ flowchart TD
 | [`mlflow/`](mlflow/README.md) | `ui.sh` | experiment tracking UI |
 | [`dev/`](dev/README.md) | `check.sh`, `select-arch.sh`, `readme-sync.sh`, `shell.sh` | quality gate + arch + container shell |
 | [`claude/`](claude/README.md) | `set-claude-env.sh`, `reset-claude-env.sh` | point Claude Code at a local model |
+| _(root)_ | `entire_setup.sh` | install the Entire CLI and wire its git + Claude Code hooks |
+| _(root)_ | `devcontainer_doctor.sh` | verify node/claude/omc/uv/.venv/kedro/notebooks/catalog/entire |
 
 ## The typical loop
 

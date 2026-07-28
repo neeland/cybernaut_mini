@@ -43,6 +43,23 @@ command -v uv >/dev/null 2>&1 \
   && ok "uv $(uv --version 2>/dev/null)" \
   || bad "uv missing" "curl -LsSf https://astral.sh/uv/install.sh | sh"
 
+# Entire: the repo's git + Claude Code hooks call `entire` unconditionally, so a
+# missing binary means every commit prints a warning and captures nothing.
+if command -v entire >/dev/null 2>&1; then
+  ok "entire $(entire version 2>/dev/null | head -1)"
+  # Hook matchers change between releases; stale ones stop firing silently and
+  # only `entire doctor` notices.
+  if entire doctor --force </dev/null 2>&1 | grep -qi "OUT OF DATE"; then
+    bad "Entire agent hooks are out of date (they no longer fire)" \
+        "scripts/entire_setup.sh"
+  else
+    ok "Entire hooks current"
+  fi
+else
+  bad "entire missing (git hooks print a warning and capture nothing)" \
+      "scripts/entire_setup.sh"
+fi
+
 [ -x .venv/bin/python ] \
   && ok ".venv ($(.venv/bin/python --version 2>&1))" \
   || bad ".venv missing" "uv sync --extra viz"

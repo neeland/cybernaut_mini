@@ -1,7 +1,7 @@
 .PHONY: install install-prod env test lint typecheck check \
 	build-sample search-sample eval-sample \
 	ingest ingest-prod build-prod eval-pipeline viz pipelines \
-	notebooks lab
+	notebooks lab entire doctor
 
 install: env
 	uv sync
@@ -12,6 +12,17 @@ install-prod: env
 
 env:
 	python3 scripts/sync_env.py
+
+# Install the Entire CLI and (re)wire its git + Claude Code hooks. Run after a
+# release bumps the hook format, or whenever commits print the "[entire] ... not
+# installed" warning. Also runs on devcontainer create.
+entire:
+	scripts/entire_setup.sh
+
+# Verify the container: node/claude/omc/uv/.venv plus kedro, notebooks, catalog
+# and Entire.
+doctor:
+	scripts/devcontainer_doctor.sh
 
 test:
 	uv run pytest

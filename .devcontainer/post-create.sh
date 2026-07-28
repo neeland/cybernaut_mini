@@ -44,6 +44,19 @@ else
   log "WARN: scripts/setup_claude_omc.sh missing; claude/omc left at image versions"
 fi
 
+# 3b. Entire CLI — session capture linked to commits. The repo ships the hooks
+#     (.git/hooks, .claude/settings.json, .entire/settings.json) but they no-op
+#     without the binary, which is what made every commit print
+#     "[entire] Entire CLI is enabled but not installed or not on PATH".
+#     The script also refreshes hooks, whose tool matchers change between
+#     releases and silently stop firing when stale.
+if [ -f scripts/entire_setup.sh ]; then
+  bash scripts/entire_setup.sh \
+    || log "WARN: entire setup incomplete — re-run scripts/entire_setup.sh"
+else
+  log "NOTE: scripts/entire_setup.sh missing; Entire hooks will no-op"
+fi
+
 # 4. pre-commit git hooks (only if the repo defines them)
 if [ -f .pre-commit-config.yaml ] && command -v uv >/dev/null 2>&1; then
   log "installing pre-commit hooks"
@@ -73,6 +86,8 @@ make notebooks                       # run every notebook headlessly
 make lab                             # JupyterLab with catalog/context/session injected (:8888)
 
 make install-prod                    # add the hf + st extras for real corpus builds
+make entire                          # install/refresh the Entire CLI + its hooks
+make doctor                          # verify the whole container is wired up
 vd artifacts/sample                  # browse index artifacts (VisiData)
 scripts/devcontainer_doctor.sh       # verify claude/omc/uv/.venv/kedro/catalog are healthy
 scripts/setup_claude_omc.sh          # (re)install/update Claude Code + OMC
