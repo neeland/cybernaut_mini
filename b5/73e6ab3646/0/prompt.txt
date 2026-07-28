@@ -1,0 +1,21 @@
+The goal of this repo is to reverse engineer cybernaut with this blog as a reference
+https://nosible.com/blog/the-road-to-cybernaut-1
+I haven't read the blog properly but the point of this repo is to reproduce the tech outlined in the blog as well as possible. 
+
+I want to understand the blog by using this repo so include direct references to the blog. 
+
+I want a working version that is well documented. probably makes sense to split each pipeline so i can learn similar things together. 
+
+include assumptions and considerations wherever possible and what is coded to overcome considerations. make it clear what alternatives could have been used (alternative repos, models, design philosophies, packages, technical techniques etc. this is a core learning aspect)
+
+ensure this is checked at every commit (update agents.md or claude.md)
+Include `README.md` in every folder with a mermaid diagram that will render on github
+keep omc wiki
+
+let's discuss first before we complete plan
+
+ blog is captured in markdown @data/00_reference/the-road-to-cybernaut-1.md and i did an analysis of blog contents here @data/00_reference/the-road-to-cybernaut-1.build-guide.md /effort max i want a working version with local data i can learn from. i want to understand how everything is done and the considerations involved at every step and throughout repo
+
+---
+
+continue
