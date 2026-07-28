@@ -201,3 +201,27 @@ def test_shard_index_absent_without_valid_marker(tmp_path: Path) -> None:
     target.mkdir()
     (target / "documents.jsonl").write_text("", encoding="utf-8")
     assert ShardIndexDataset(str(target)).exists() is False
+
+
+def test_missing_input_reports_how_to_produce_it(tmp_path: Path) -> None:
+    """A missing pipeline input must explain itself, not raise a bare FileNotFoundError.
+
+    Regression: in a fresh clone `kedro run` died with an unannotated traceback out of
+    `io.open`, giving no hint that the corpus is produced by an upstream pipeline.
+    """
+    dataset = JsonlDataset(str(tmp_path / "absent" / "corpus.jsonl"))
+    with pytest.raises(DatasetError, match="does not exist"):
+        dataset.load()
+
+
+def test_missing_input_error_names_both_recoveries(tmp_path: Path) -> None:
+    dataset = JsonlDataset(str(tmp_path / "absent.jsonl"))
+    try:
+        dataset.load()
+    except DatasetError as exc:
+        message = str(exc)
+    else:  # pragma: no cover - the call above must raise
+        pytest.fail("expected DatasetError")
+
+    assert "corpus_ingest" in message, "should name the pipeline that produces it"
+    assert "input_path" in message, "should name the override for an existing corpus"

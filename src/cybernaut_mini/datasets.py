@@ -78,6 +78,19 @@ class JsonlDataset(AbstractDataset[list[Any], list[Any]]):
     def load(self) -> list[Any]:
         import json
 
+        if not self._filepath.exists():
+            # A bare traceback here is unhelpful: the usual cause is running a build
+            # before the pipeline that produces its input has ever run.
+            msg = (
+                f"{self._filepath} does not exist.\n"
+                f"  If it is a pipeline output, produce it first: "
+                f"`kedro run --pipeline corpus_ingest` (see conf/base/catalog.yml).\n"
+                f"  If you meant an existing corpus, point at it: "
+                f"`--params input_path=data/sample/documents.jsonl` "
+                f"(CLI: `--input data/sample/documents.jsonl`)."
+            )
+            raise DatasetError(msg)
+
         records: list[Any] = []
         with self._filepath.open(encoding="utf-8") as handle:
             for line in handle:
