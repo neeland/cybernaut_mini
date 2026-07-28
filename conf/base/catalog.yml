@@ -1,0 +1,3 @@
+# Artifact catalog. Build/eval pipelines mostly use in-memory datasets plus the
+# index writer node, which persists via cybernaut_mini.indexing (canonical JSON + npy).
+# Entries here are for artifacts addressable directly by `kedro run` users.
