@@ -1,0 +1,23 @@
+# Quality-oriented defaults: real sentence-transformers embeddings (downloads the
+# model on first use). For a fully offline run, use configs/tiny.yaml.
+seed: 42
+embedding:
+  provider: sentence_transformers
+  model: intfloat/multilingual-e5-small
+index:
+  n_shards: 12
+  max_keywords: 30
+  max_entities: 30
+  cooccurrence_window: 5
+  min_edge_count: 2
+rrf:
+  k: 60
+  dense_weight: 1.0
+  lexical_weight: 1.0
+  entity_weight: 0.5
+agent:
+  exploration_constant: 1.2
+  max_expansions: 5
+  max_retrieval_calls: 18
+  judge: heuristic
+  query_generator: heuristic

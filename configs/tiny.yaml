@@ -1,0 +1,23 @@
+# Fully offline configuration for the 60-document sample corpus: deterministic
+# hash embedder (no downloads) and 8 shards.
+seed: 42
+embedding:
+  provider: hash
+  dim: 256
+index:
+  n_shards: 8
+  max_keywords: 30
+  max_entities: 30
+  cooccurrence_window: 5
+  min_edge_count: 2
+rrf:
+  k: 60
+  dense_weight: 1.0
+  lexical_weight: 1.0
+  entity_weight: 0.5
+agent:
+  exploration_constant: 1.2
+  max_expansions: 5
+  max_retrieval_calls: 18
+  judge: heuristic
+  query_generator: heuristic
