@@ -1,2 +1,16 @@
 .omc/
 .DS_Store
+.env
+.claude/settings.local.json
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+artifacts/*
+!artifacts/.gitkeep
+dist/
+conf/local/*
+!conf/local/.gitkeep
+.viz/
