@@ -1,0 +1,79 @@
+{
+  "name": "cybernaut-mini",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": "true",
+      "configureZshAsDefaultShell": "true",
+      "username": "vscode",
+      "upgradePackages": "true"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  // kedro-viz serves the interactive pipeline graph on 4141 (scripts: `kedro viz`).
+  "forwardPorts": [4141],
+  "portsAttributes": {
+    "4141": {
+      "label": "kedro-viz",
+      "onAutoForward": "openBrowserOnce"
+    }
+  },
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  // Runs on the HOST before the container is created. Guarantees .env exists
+  // (so `runArgs: --env-file` below never fails) and, best-effort, syncs the
+  // MCP/API keys from the sibling repos via scripts/sync_env.py. Falls back to
+  // copying .env.example if python3 is unavailable on the host.
+  "initializeCommand": "python3 scripts/sync_env.py || cp -n .env.example .env || true",
+  // Inject repo-root .env into the container environment at boot, so the MCP
+  // secrets (EXA_API_KEY, NUMERAI_MCP_AUTH, NOSIBLE_API_KEY, HF_TOKEN,
+  // GITHUB_PERSONAL_ACCESS_TOKEN, …) are ambient for every process, including
+  // Claude Code — which expands ${VAR} in .mcp.json from the process env.
+  "runArgs": ["--env-file", "${localWorkspaceFolder}/.env"],
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "mounts": [
+    // Shared shell config (zshrc / starship / tmux) — single source of truth
+    // from the host's ~/env checkout (https://github.com/neeland/env).
+    "source=${localEnv:HOME}/env,target=/home/vscode/env,type=bind,consistency=cached,readonly",
+    "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached"
+    // NOTE: do NOT bind-mount ~/.gitconfig. A single-file bind mount is an
+    // immovable mount point, so VS Code's `git config --global
+    // credential.helper` (atomic temp-file + rename) fails with "Device or
+    // resource busy" and the container never finishes starting. Dev Containers
+    // already copies the host gitconfig in as a writable file
+    // (`dev.containers.copyGitConfig`, default true).
+  ],
+  "remoteEnv": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PATH": "${containerEnv:PATH}:/home/vscode/.local/bin",
+    "UV_LINK_MODE": "copy"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-toolsai.jupyter",
+        "kedro.Kedro",
+        "charliermarsh.ruff",
+        "redhat.vscode-yaml",
+        "tamasfe.even-better-toml",
+        "bierner.markdown-mermaid",
+        "ms-toolsai.datawrangler",
+        "Anthropic.claude-code"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "editor.formatOnSave": true,
+        "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+        "python.analysis.typeCheckingMode": "basic",
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestArgs": ["tests"]
+      }
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh"
+}

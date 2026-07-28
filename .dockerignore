@@ -1,0 +1,13 @@
+# Keep the devcontainer build context small — the Dockerfile COPYs nothing,
+# but without this the classic builder streams the whole repo (incl. the
+# 2+ GB .venv) into the daemon before the first layer runs.
+.venv/
+.git/
+artifacts/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+.omc/
+.DS_Store
