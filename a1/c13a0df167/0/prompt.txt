@@ -1,0 +1,43 @@
+i made a change in focus to be a share nossible doesn't have but i have changed my mind, i want to reproduce nossible tech as closely as possible at scale;; do you have aws log in details;;; these should be mounted from main machine
+
+---
+
+<task-notification>
+<task-id>baz7b2829</task-id>
+<tool-use-id>toolu_01Bnp1JKniA5VThtVUxc8tnW</tool-use-id>
+<output-file>/tmp/claude-1000/-workspaces-cybernaut-mini/1739850f-85bf-4d10-b02b-a0b2492e7df8/tasks/baz7b2829.output</output-file>
+<status>completed</status>
+<summary>Background command "Run test suite on rewound main" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+can we set the container up to mount these aws creds from the main machine?
+
+---
+
+exists on main .aws
+
+---
+
+can we just mount it without rebuild and ensure mounts in future rebuilds
+
+---
+
+okay what corpos can we use? nosible huggingface has a corpos? lets discuss
+
+---
+
+/mcp__exa__web_search_help cross check this last statement
+
+---
+
+let's discuss more as the quality of the shard impact everything, what other data sources could we use to enhance?
+
+---
+
+I want something as close to realistic nossible
+
+---
+
+keep going /auto
