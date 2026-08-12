@@ -158,11 +158,7 @@ def build_manifests(
         min_edge_count=index_config.min_edge_count,
     )
 
-    embedding_model = (
-        embedding_config.model
-        if embedding_config.provider != "hash"
-        else f"hash-{embedding_config.dim}"
-    )
+    embedding_model = embedding_config.identifier()
 
     manifests: list[dict[str, Any]] = []
     for shard_id in range(n_shards):
@@ -214,11 +210,7 @@ def build_index_payload(
     vectors = np.array(vectors_list, dtype=np.float32)
 
     embedding_config = EmbeddingConfig.model_validate(embedding_params)
-    embedding_model = (
-        embedding_config.model
-        if embedding_config.provider != "hash"
-        else f"hash-{embedding_config.dim}"
-    )
+    embedding_model = embedding_config.identifier()
 
     meta = IndexMeta(
         embedding_model=embedding_model,

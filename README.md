@@ -243,6 +243,7 @@ query add overhead without proportional quality gain. On a real-scale index
 |---|---|---|
 | Reward weights | 0.45/0.20/0.20/0.10/-0.05 | Sum to 0.95; perfect score unreachable by design |
 | Retrieval-call budget | 5+9+4 = 18 | Stage schedule from spec resolution #1 |
+| Default embedder | `model2vec` (`potion-multilingual-128M`) | Semantic vectors with no torch; shard k-means needs a meaningful space |
 | Hash embedder dim | 256 (tiny: 256, tests: 64) | `hashlib.blake2b` token+char-trigram buckets, L2-norm |
 | spaCy | Optional `[nlp]` extra | Regex fallback tested by default; `en_core_web_sm` auto-detected |
 | Byte-for-byte determinism | Same seed + provider + sklearn version -> identical | `canonical_dumps` + float32 npy |
@@ -272,12 +273,20 @@ violates. `kedro viz` renders only the `index_build` and `evaluation` pipelines.
 
 - **Educational only.** Not a production search system. Results on real corpora
   depend heavily on embedding quality.
-- **Hash embedder is the default.** Fast, offline, and deterministic, but poor
-  recall on paraphrase-heavy queries. It is the baseline so the project runs on a
-  bare `uv sync` with no downloads. For better quality, opt into real embeddings
-  explicitly — `--config configs/default.yaml` (CLI) or `--env prod` (Kedro) —
-  after installing the extra with `uv sync --extra st` (or `make install-prod`).
-  That path needs internet on first run.
+- **Three embedding providers, ascending cost.** The default is `model2vec`:
+  static (lookup-table) embeddings distilled from a real transformer, so they carry
+  semantic structure without pulling in torch. It is a core dependency, but it
+  downloads weights (~100 MB) on first use.
+  - `hash` — feature hashing of tokens and character trigrams. Fast, fully offline,
+    byte-deterministic, and a first-class provider rather than a test mock. But it
+    has *no* semantic structure: paraphrases land in unrelated buckets. Selected by
+    `--offline` and `configs/tiny.yaml`. It is no longer the default because shards
+    are k-means clusters over document vectors, and clustering only yields coherent
+    shards if the space carries meaning — with hashing, shard selection looks broken
+    when the real fault is the embedder.
+  - `sentence_transformers` — the quality ceiling. Needs `uv sync --extra st` (or
+    `make install-prod`) and internet on first run; opt in with
+    `--config configs/default.yaml` (CLI) or `--env prod` (Kedro).
 - **Small corpus.** The 63-doc synthetic corpus is for testing; metric numbers
   above should not be extrapolated to real workloads.
 - **sklearn version drift.** KMeans output depends on the installed sklearn

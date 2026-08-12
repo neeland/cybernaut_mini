@@ -10,9 +10,13 @@ from cybernaut_mini.config import ConfigError, load_config
 def test_defaults_match_spec() -> None:
     config = load_config(environ={})
     assert config.seed == 42
-    # The baseline provider is the offline hash embedder, not sentence_transformers:
-    # see test_default_config_runs_on_a_bare_install below.
-    assert config.embedding.provider == "hash"
+    # The baseline is model2vec: distilled static embeddings that carry semantic
+    # structure without torch. Not 'hash' — shards are k-means clusters over these
+    # vectors, and feature hashing has no semantics to cluster on. Not
+    # 'sentence_transformers' — that lives behind the optional 'st' extra; see
+    # test_default_config_runs_on_a_bare_install below.
+    assert config.embedding.provider == "model2vec"
+    assert config.embedding.model_name == "minishlab/potion-multilingual-128M"
     assert config.index.n_shards == 12
     assert config.rrf.k == 60
     assert config.agent.max_retrieval_calls == 18
@@ -26,10 +30,16 @@ def test_default_config_runs_on_a_bare_install() -> None:
     `kedro run` or `cybernaut-mini build` therefore died with "sentence-transformers is
     not installed" on a freshly built container.
 
-    ``require_offline_compatible`` is exactly the "needs no download" predicate, so
-    asserting it on the defaults pins the property.
+    This asserts the property directly by importing the default provider's backing
+    package. It deliberately does NOT use ``require_offline_compatible``: since the
+    default became model2vec those are two different properties — model2vec ships in
+    the core dependencies (bare install works) but downloads weights on first use
+    (not offline-safe). Conflating them is what this test used to do.
     """
-    load_config(environ={}).require_offline_compatible()
+    provider = load_config(environ={}).embedding.provider
+    assert provider != "sentence_transformers", "default must not need the 'st' extra"
+    if provider == "model2vec":
+        import model2vec  # noqa: F401  — must be a core dependency, not an extra
 
 
 def test_yaml_overrides_defaults(tmp_path: Path) -> None:

@@ -5,23 +5,34 @@
 # overridden per run via `${runtime_params:...}` (the CLI's --input / --index flags)
 # or per environment via `--env prod`.
 #
-# These defaults deliberately do NOT mirror configs/default.yaml: that file is the
-# quality profile and selects sentence_transformers, which lives behind the optional
-# 'st' extra. A bare `kedro run` must work on the default install, so the baseline
-# here is the offline hash embedder. Opt into real embeddings explicitly with
-# `--config configs/default.yaml` (CLI) or `--env prod` (Kedro).
+# These defaults MUST mirror the EmbeddingConfig defaults in src/cybernaut_mini/
+# config.py. The two are read by different entrypoints — `kedro run` reads this file,
+# while the Typer CLI calls load_config() and gets the dataclass defaults — so if they
+# drift, the same corpus builds a different index depending on how it was invoked.
+#
+# They deliberately do NOT mirror configs/default.yaml: that file is the quality
+# profile and selects sentence_transformers, which lives behind the optional 'st'
+# extra. A bare `kedro run` must work on the default install.
 seed: 42
 embedding:
-  # Deterministic feature hashing — no download, no extra, works offline. A
-  # first-class provider, not a stub.
-  provider: hash
-  # Used only when provider is 'sentence_transformers'.
-  model: intfloat/multilingual-e5-small
+  # Static distilled embeddings: real semantic structure, no torch, core dependency.
+  # Downloads weights on first use, so it is NOT offline-safe on a cold cache — use
+  # provider 'hash' (configs/tiny.yaml, or --offline) for that.
+  #
+  # Not 'hash' by default because shards are k-means clusters over these vectors:
+  # feature hashing has no semantics to cluster on, which makes shard selection
+  # (blog stage 5) look broken when the real fault is the embedder.
+  provider: model2vec
+  # Empty resolves to the provider's default in PROVIDER_DEFAULT_MODEL
+  # (minishlab/potion-multilingual-128M for model2vec).
+  model: ""
   # Commit SHA of the model weights. null resolves to the repo's default branch,
   # which is fine locally but not reproducible: two builds months apart can embed
   # with different tensors and silently yield a different index from one corpus.
   # Production builds must pin it — see conf/prod/parameters.yml.
   revision: null
+  # Vector size for the 'hash' provider ONLY. model2vec and sentence_transformers
+  # report their own dimension from the loaded weights and ignore this.
   dim: 256
 index:
   n_shards: 12

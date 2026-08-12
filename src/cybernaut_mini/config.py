@@ -21,15 +21,38 @@ class ConfigError(ValueError):
     """Raised for invalid or unusable configuration."""
 
 
+#: Default weights per provider. Kept here rather than on the `model` field so the
+#: two downloadable providers can have different defaults without a caller who sets
+#: only `provider` silently inheriting the other one's model name.
+PROVIDER_DEFAULT_MODEL: dict[str, str] = {
+    "model2vec": "minishlab/potion-multilingual-128M",
+    "sentence_transformers": "intfloat/multilingual-e5-small",
+}
+
+#: Prefix marking a model2vec index inside ``IndexMeta.embedding_model``. Lives here,
+#: not on the embedder, so config/retrieval/index_build share one definition and the
+#: providers module stays importable without pulling in the model2vec package.
+MODEL2VEC_PREFIX = "model2vec:"
+
+
 class EmbeddingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    # Defaults to the offline provider so a bare `kedro run` or `cybernaut-mini build`
-    # works on the default install. 'sentence_transformers' is the quality option but
-    # lives behind the optional 'st' extra, so it must be opted into explicitly
-    # (configs/default.yaml, or --env prod).
-    provider: Literal["hash", "sentence_transformers"] = "hash"
-    model: str = "intfloat/multilingual-e5-small"
+    # Defaults to 'model2vec': real distilled embeddings that carry semantic
+    # structure, with no torch, so a bare `kedro run` still works on the default
+    # install. It is NOT the hash embedder, because shards are clusters over these
+    # vectors and feature hashing has no semantics to cluster on.
+    # 'hash' remains a first-class OFFLINE provider (no download, byte-deterministic)
+    # and is what --offline and configs/tiny.yaml select.
+    # 'sentence_transformers' is the quality ceiling, behind the optional 'st' extra.
+    provider: Literal["hash", "model2vec", "sentence_transformers"] = "model2vec"
+    model: str = Field(
+        default="",
+        description=(
+            "Model repo id. Empty resolves to this provider's default from "
+            "PROVIDER_DEFAULT_MODEL; read it through `model_name`, never directly."
+        ),
+    )
     revision: str | None = Field(
         default=None,
         description=(
@@ -37,7 +60,35 @@ class EmbeddingConfig(BaseModel):
             "default branch and is not reproducible; pin it for production builds."
         ),
     )
-    dim: int = Field(default=256, ge=8, description="Vector size for the hash provider")
+    dim: int = Field(
+        default=256,
+        ge=8,
+        description=(
+            "Vector size for the hash provider only. The downloadable providers "
+            "report their own dimension from the loaded weights."
+        ),
+    )
+
+    @property
+    def model_name(self) -> str:
+        """The model repo id to load, resolving the per-provider default."""
+        if self.model:
+            return self.model
+        return PROVIDER_DEFAULT_MODEL.get(self.provider, "")
+
+    def identifier(self) -> str:
+        """The ``IndexMeta.embedding_model`` value this configuration produces.
+
+        Must stay in step with each provider's ``identifier`` property: the build
+        writes this string and ``retrieval.provider_from_meta`` dispatches on it, so
+        a mismatch reopens an index with the wrong provider and silently yields
+        vectors that are not comparable to the stored ones.
+        """
+        if self.provider == "hash":
+            return f"hash-{self.dim}"
+        if self.provider == "model2vec":
+            return f"{MODEL2VEC_PREFIX}{self.model_name}"
+        return self.model_name
 
     def is_pinned(self) -> bool:
         """True when this configuration identifies exactly one set of weights."""
@@ -89,11 +140,15 @@ class AppConfig(BaseModel):
     agent: AgentConfig = Field(default_factory=AgentConfig)
 
     def require_offline_compatible(self) -> None:
-        """Reject configurations that would require network access (``--offline``)."""
-        if self.embedding.provider == "sentence_transformers":
+        """Reject configurations that would require network access (``--offline``).
+
+        Both downloadable providers are rejected: a warm cache is not something the
+        config can verify, so 'may require a download' is treated as 'does'.
+        """
+        if self.embedding.provider != "hash":
             msg = (
-                "offline mode: embedding provider 'sentence_transformers' may require a "
-                "model download; use provider 'hash' (e.g. configs/tiny.yaml)"
+                f"offline mode: embedding provider {self.embedding.provider!r} may "
+                "require a model download; use provider 'hash' (e.g. configs/tiny.yaml)"
             )
             raise ConfigError(msg)
 
@@ -106,7 +161,7 @@ class AppConfig(BaseModel):
         """
         if not self.embedding.is_pinned():
             msg = (
-                f"embedding model {self.embedding.model!r} is not pinned "
+                f"embedding model {self.embedding.model_name!r} is not pinned "
                 f"(revision={self.embedding.revision!r}); set embedding.revision to a "
                 f"commit SHA so the index can be rebuilt byte-for-byte"
             )

@@ -63,7 +63,7 @@ class ReproducibilityHooks:
             return
 
         message = (
-            f"embedding model {embedding.model!r} is not pinned "
+            f"embedding model {embedding.model_name!r} is not pinned "
             f"(embedding.revision is {embedding.revision!r}); the resulting index "
             f"cannot be rebuilt byte-for-byte"
         )

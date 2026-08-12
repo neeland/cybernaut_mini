@@ -35,13 +35,31 @@ if TYPE_CHECKING:
 def provider_from_meta(meta: IndexMeta, *, offline: bool = False) -> EmbeddingProvider:
     """Reconstruct the embedding provider that was used to build the index.
 
-    If the index was built with a hash provider (``meta.embedding_model`` starts
-    with ``"hash-"``), returns a :class:`HashEmbedder` with the correct dim.
-    Otherwise returns a :class:`SentenceTransformersEmbedder` unless ``offline``
-    is True, in which case raises :class:`ConfigError`.
+    The provider is recovered from the shape of ``meta.embedding_model``: a
+    ``"hash-"`` prefix means :class:`HashEmbedder`, a ``"model2vec:"`` prefix means
+    :class:`Model2VecEmbedder`, and a bare repo id means
+    :class:`SentenceTransformersEmbedder`. Encoding the provider in the identifier
+    rather than in a new ``IndexMeta`` field keeps existing indexes readable.
+
+    Raises :class:`ConfigError` under ``offline`` for the two downloadable providers.
     """
     if meta.embedding_model.startswith("hash-"):
         return HashEmbedder(dim=meta.embedding_dim)
+
+    from cybernaut_mini.providers.embeddings import Model2VecEmbedder
+
+    if meta.embedding_model.startswith(Model2VecEmbedder.PREFIX):
+        if offline:
+            msg = (
+                "offline mode: embedding provider 'model2vec' may require a model "
+                "download; use an index built with provider 'hash'"
+            )
+            raise ConfigError(msg)
+        model_name = meta.embedding_model[len(Model2VecEmbedder.PREFIX) :]
+        # Reuse the build-time revision so query vectors come from the same weights
+        # as the stored document vectors.
+        return Model2VecEmbedder(model_name, revision=meta.embedding_revision)
+
     if offline:
         msg = (
             "offline mode: embedding provider 'sentence_transformers' may require a "
@@ -50,8 +68,6 @@ def provider_from_meta(meta: IndexMeta, *, offline: bool = False) -> EmbeddingPr
         raise ConfigError(msg)
     from cybernaut_mini.providers.embeddings import SentenceTransformersEmbedder
 
-    # Reuse the build-time revision so query vectors come from the same weights
-    # as the stored document vectors.
     return SentenceTransformersEmbedder(meta.embedding_model, revision=meta.embedding_revision)
 
 

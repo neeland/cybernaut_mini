@@ -13,6 +13,7 @@ dependencies = [
     "rank-bm25>=0.2.2",
     "kedro>=0.19.8",
     "pyyaml>=6.0",
+    "model2vec>=0.3",
 ]
 
 [project.optional-dependencies]

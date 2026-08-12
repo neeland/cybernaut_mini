@@ -1,8 +1,32 @@
 """Embedding providers behind a common protocol.
 
-``HashEmbedder`` is a first-class deterministic offline provider (feature hashing of
-tokens and character trigrams), not a test mock. ``SentenceTransformersEmbedder``
-wraps E5-style models and is the quality option; it may download weights on first use.
+Three providers, in ascending order of cost:
+
+``Model2VecEmbedder`` is the DEFAULT. Static (lookup-table) embeddings distilled
+from a real transformer — semantic structure without torch, so it ships in the
+core dependencies rather than an extra. It is what shard learning needs: shards
+are k-means clusters over document vectors, and clustering only produces coherent
+shards if the vector space carries meaning.
+
+``HashEmbedder`` is a deterministic offline provider (feature hashing of tokens and
+character trigrams), not a test mock. It is real, fast and needs no download, but
+feature hashing has NO semantic structure — documents about the same topic land in
+unrelated buckets. It is therefore correct for offline/deterministic tests and
+WRONG for learning shards. It is no longer the default for exactly that reason.
+
+``SentenceTransformersEmbedder`` wraps E5-style models and is the quality ceiling;
+it needs the optional 'st' extra (torch) and downloads weights on first use.
+
+Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — stage 5 (Shard
+Selection): the dense selector compares question embeddings against shard summary
+embeddings, so shard quality is bounded above by embedding quality.
+
+Assumptions: model2vec's distilled vectors are close enough to their teacher to
+cluster comparably. Not verified here; the ablation belongs in evals.
+Alternatives rejected: keeping the hash embedder as default (cheap, but yields
+incoherent shards and would make stages 5-7 look broken when the fault is the
+embedder); making sentence-transformers the default (best vectors, but pulls torch
+into every install and breaks a bare `kedro run`).
 """
 
 from __future__ import annotations
@@ -14,7 +38,7 @@ from typing import Protocol
 import numpy as np
 import numpy.typing as npt
 
-from cybernaut_mini.config import ConfigError, EmbeddingConfig
+from cybernaut_mini.config import MODEL2VEC_PREFIX, ConfigError, EmbeddingConfig
 from cybernaut_mini.text import TextProcessor
 
 FloatArray = npt.NDArray[np.float32]
@@ -79,6 +103,69 @@ class HashEmbedder:
         return self._embed(texts)
 
 
+class Model2VecEmbedder:
+    """Static distilled embeddings: real semantics, no torch, CPU-only.
+
+    Weights download on first use and are then cached, so this provider is not
+    offline-safe on a cold cache — ``create_embedding_provider`` rejects it under
+    ``offline``.
+
+    Pinning is done by us, not by model2vec: ``StaticModel.from_pretrained`` takes
+    no ``revision`` argument, so a revision is resolved to an immutable local
+    snapshot via ``huggingface_hub`` first. Without that, ``require_reproducible``
+    could pass while the weights silently moved.
+    """
+
+    #: Marks the provider inside ``IndexMeta.embedding_model`` so an index can be
+    #: reopened with the right provider. Mirrors the existing ``hash-`` convention
+    #: and avoids an ARTIFACT_VERSION bump for a new metadata field.
+    PREFIX = MODEL2VEC_PREFIX
+
+    def __init__(self, model_name: str, revision: str | None = None) -> None:
+        try:
+            from model2vec import StaticModel
+        except ImportError as exc:  # pragma: no cover - core dependency
+            msg = (
+                "embedding provider 'model2vec' needs the 'model2vec' package, which "
+                "is a core dependency — reinstall with `uv sync`."
+            )
+            raise ConfigError(msg) from exc
+
+        self._model_name = model_name
+        self._revision = revision
+        token = os.environ.get("HF_TOKEN") or None
+
+        source: str = model_name
+        if revision is not None:
+            from huggingface_hub import snapshot_download
+
+            source = snapshot_download(model_name, revision=revision, token=token)
+
+        # force_download defaults to True upstream, which would re-fetch the weights
+        # on every construction and break offline reuse of a warm cache.
+        self._model = StaticModel.from_pretrained(source, token=token, force_download=False)
+
+    @property
+    def identifier(self) -> str:
+        return f"{self.PREFIX}{self._model_name}"
+
+    @property
+    def dim(self) -> int:
+        return int(self._model.dim)
+
+    def _embed(self, texts: list[str]) -> FloatArray:
+        vectors = self._model.encode(texts, show_progress_bar=False)
+        return l2_normalize(np.asarray(vectors, dtype=np.float32))
+
+    def embed_documents(self, texts: list[str]) -> FloatArray:
+        return self._embed(texts)
+
+    def embed_queries(self, texts: list[str]) -> FloatArray:
+        # Static models carry no query/passage asymmetry: the same lookup table
+        # produces both sides, so no E5-style prefix applies.
+        return self._embed(texts)
+
+
 class SentenceTransformersEmbedder:
     """sentence-transformers wrapper with E5 ``query:``/``passage:`` prefixes.
 
@@ -137,8 +224,10 @@ def create_embedding_provider(
         return HashEmbedder(dim=config.dim)
     if offline:
         msg = (
-            "offline mode: provider 'sentence_transformers' may require a model "
+            f"offline mode: provider {config.provider!r} may require a model "
             "download; use provider 'hash'"
         )
         raise ConfigError(msg)
-    return SentenceTransformersEmbedder(config.model, revision=config.revision)
+    if config.provider == "model2vec":
+        return Model2VecEmbedder(config.model_name, revision=config.revision)
+    return SentenceTransformersEmbedder(config.model_name, revision=config.revision)

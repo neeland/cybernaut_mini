@@ -44,3 +44,65 @@ def test_factory_offline_rejects_sentence_transformers() -> None:
     config = EmbeddingConfig(provider="sentence_transformers")
     with pytest.raises(ConfigError, match="offline"):
         create_embedding_provider(config, offline=True)
+
+
+def test_factory_offline_rejects_model2vec() -> None:
+    """model2vec is a core dependency but still downloads weights on first use."""
+    config = EmbeddingConfig(provider="model2vec")
+    with pytest.raises(ConfigError, match="offline"):
+        create_embedding_provider(config, offline=True)
+
+
+# --------------------------------------------------------------------------- #
+# identifier round-trip                                                        #
+#                                                                              #
+# `EmbeddingConfig.identifier()` is written into IndexMeta.embedding_model at   #
+# build time, and `provider_from_meta` dispatches on that string at query time. #
+# If the two disagree, an index reopens under the WRONG provider and produces   #
+# query vectors that are not comparable to the stored ones — no exception, just #
+# silently meaningless scores. These tests pin the two halves together without  #
+# downloading weights.                                                         #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    ("config", "expected"),
+    [
+        (EmbeddingConfig(provider="hash", dim=32), "hash-32"),
+        (
+            EmbeddingConfig(provider="model2vec"),
+            "model2vec:minishlab/potion-multilingual-128M",
+        ),
+        (
+            EmbeddingConfig(provider="model2vec", model="minishlab/potion-base-8M"),
+            "model2vec:minishlab/potion-base-8M",
+        ),
+        (
+            EmbeddingConfig(provider="sentence_transformers"),
+            "intfloat/multilingual-e5-small",
+        ),
+    ],
+)
+def test_config_identifier(config: EmbeddingConfig, expected: str) -> None:
+    assert config.identifier() == expected
+
+
+def test_model2vec_identifier_routes_back_to_model2vec() -> None:
+    """A model2vec identifier must not be mistaken for a sentence-transformers repo id.
+
+    Asserted via the offline rejection, whose message names the provider: that
+    proves which branch `provider_from_meta` took without loading any weights.
+    """
+    from cybernaut_mini.models import IndexMeta
+    from cybernaut_mini.retrieval import provider_from_meta
+
+    meta = IndexMeta(
+        embedding_model=EmbeddingConfig(provider="model2vec").identifier(),
+        embedding_dim=256,
+        embedding_revision=None,
+        n_shards=1,
+        n_documents=1,
+        seed=42,
+    )
+    with pytest.raises(ConfigError, match="model2vec"):
+        provider_from_meta(meta, offline=True)
