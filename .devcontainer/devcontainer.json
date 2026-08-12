@@ -27,7 +27,11 @@
   // (so `runArgs: --env-file` below never fails) and, best-effort, syncs the
   // MCP/API keys from the sibling repos via scripts/sync_env.py. Falls back to
   // copying .env.example if python3 is unavailable on the host.
-  "initializeCommand": "python3 scripts/sync_env.py || cp -n .env.example .env || true",
+  // The mkdir guarantees the ~/.aws bind source exists: Docker auto-creates a
+  // missing bind source as a ROOT-owned directory, which then silently fails
+  // every credential read inside the container. Creating it as the host user
+  // first keeps ownership correct even when there are no credentials yet.
+  "initializeCommand": "mkdir -p \"$HOME/.aws\"; python3 scripts/sync_env.py || cp -n .env.example .env || true",
   // Inject repo-root .env into the container environment at boot, so the MCP
   // secrets (EXA_API_KEY, NUMERAI_MCP_AUTH, NOSIBLE_API_KEY, HF_TOKEN,
   // GITHUB_PERSONAL_ACCESS_TOKEN, …) are ambient for every process, including
@@ -38,7 +42,15 @@
     // Shared shell config (zshrc / starship / tmux) — single source of truth
     // from the host's ~/env checkout (https://github.com/neeland/env).
     "source=${localEnv:HOME}/env,target=/home/vscode/env,type=bind,consistency=cached,readonly",
-    "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached"
+    "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached",
+    // Host AWS credentials/config. Deliberately NOT readonly: `aws sso login`
+    // and any credential_process rewrite the SSO token cache under
+    // ~/.aws/sso/cache, which a readonly bind turns into a permission error.
+    // The trade-off is that the container can write to the host's real
+    // credentials — acceptable here, but it is why this is a directory mount
+    // and not a broader one. Nothing is baked into the image; remove this line
+    // and the container has no AWS access at all.
+    "source=${localEnv:HOME}/.aws,target=/home/vscode/.aws,type=bind,consistency=cached"
     // NOTE: do NOT bind-mount ~/.gitconfig. A single-file bind mount is an
     // immovable mount point, so VS Code's `git config --global
     // credential.helper` (atomic temp-file + rename) fails with "Device or

@@ -69,6 +69,28 @@ RUN set -eux; \
       echo "WARN: no duckdb/yq build for arch=$arch"; \
     fi
 
+# AWS CLI v2, for the deferred "move to AWS" phase. The binary only — no
+# credentials are baked into the image; those arrive at runtime through the
+# ~/.aws bind mount declared in devcontainer.json. Installed from the official
+# zip because Debian ships no aws-cli v2 package.
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+      amd64) awsa="x86_64" ;; \
+      arm64) awsa="aarch64" ;; \
+      *) awsa="" ;; \
+    esac; \
+    if [ -n "$awsa" ]; then \
+      tmp="$(mktemp -d)"; \
+      curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${awsa}.zip" -o "$tmp/awscliv2.zip"; \
+      unzip -q "$tmp/awscliv2.zip" -d "$tmp"; \
+      "$tmp/aws/install"; \
+      rm -rf "$tmp"; \
+      aws --version; \
+    else \
+      echo "WARN: no aws-cli build for arch=$arch"; \
+    fi
+
 # eza / delta / dust (not in Debian stable) + starship prompt.
 RUN set -eux; \
     arch="$(dpkg --print-architecture)"; \
