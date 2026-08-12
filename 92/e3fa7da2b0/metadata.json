@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.9.0",
+  "checkpoint_id": "92e3fa7da2b0",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "README.md",
+    "conf/base/parameters.yml",
+    "pyproject.toml",
+    "src/cybernaut_mini/config.py",
+    "src/cybernaut_mini/hooks.py",
+    "src/cybernaut_mini/pipelines/index_build/nodes.py",
+    "src/cybernaut_mini/providers/embeddings.py",
+    "src/cybernaut_mini/retrieval.py",
+    "tests/test_config.py",
+    "tests/test_embeddings.py",
+    "uv.lock"
+  ],
+  "sessions": [
+    {
+      "metadata": "/92/e3fa7da2b0/0/metadata.json",
+      "transcript": "/92/e3fa7da2b0/0/full.jsonl",
+      "compact_transcript": "/92/e3fa7da2b0/0/transcript.jsonl",
+      "content_hash": "/92/e3fa7da2b0/0/content_hash.txt",
+      "prompt": "/92/e3fa7da2b0/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 81,
+    "cache_creation_tokens": 131381,
+    "cache_read_tokens": 3082816,
+    "output_tokens": 23402,
+    "api_call_count": 44
+  }
+}
