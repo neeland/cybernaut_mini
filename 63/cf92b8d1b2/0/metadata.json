@@ -1,0 +1,48 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "63cf92b8d1b2",
+  "session_id": "f685d379-b9f6-4be3-b325-c5c3c3f35fbf",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-14T21:33:04.146221Z",
+  "branch": "main",
+  "checkpoints_count": 3,
+  "save_step_count": 1,
+  "files_touched": [
+    ".env.example",
+    "Makefile",
+    "ONBOARDING.md",
+    "README.md",
+    "conf/prod/catalog.yml",
+    "conf/prod/parameters.yml",
+    "scripts/check",
+    "scripts/preso.sh",
+    "scripts/setup_mac.sh",
+    "scripts/sync_env.py"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-sonnet-4-6",
+  "turn_id": "9575afdbe615",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 51,
+    "cache_creation_tokens": 133610,
+    "cache_read_tokens": 1515173,
+    "output_tokens": 11295,
+    "api_call_count": 25
+  },
+  "session_metrics": {
+    "turn_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-14T21:33:04.111666Z",
+    "agent_lines": 990,
+    "agent_removed": 19,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 990,
+    "total_lines_changed": 1009,
+    "agent_percentage": 100,
+    "metric_version": 2
+  }
+}
