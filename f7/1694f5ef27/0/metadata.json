@@ -1,0 +1,46 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "f71694f5ef27",
+  "session_id": "f685d379-b9f6-4be3-b325-c5c3c3f35fbf",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-14T21:32:28.027264Z",
+  "branch": "main",
+  "checkpoints_count": 3,
+  "save_step_count": 1,
+  "files_touched": [
+    "scripts/with-accel.sh",
+    "src/cybernaut_mini/accel.py",
+    "src/cybernaut_mini/shard_artifacts.py",
+    "src/cybernaut_mini/storage.py",
+    "tests/test_accel.py",
+    "tests/test_index_scale.py",
+    "tests/test_shard_artifacts.py",
+    "tests/test_storage.py"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-sonnet-4-6",
+  "turn_id": "9575afdbe615",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 51,
+    "cache_creation_tokens": 133610,
+    "cache_read_tokens": 1515173,
+    "output_tokens": 11295,
+    "api_call_count": 25
+  },
+  "session_metrics": {
+    "turn_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-14T21:32:27.99184Z",
+    "agent_lines": 3888,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 3888,
+    "total_lines_changed": 3888,
+    "agent_percentage": 100,
+    "metric_version": 2
+  }
+}

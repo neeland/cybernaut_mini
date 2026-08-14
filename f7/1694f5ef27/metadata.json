@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "f71694f5ef27",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "scripts/with-accel.sh",
+    "src/cybernaut_mini/accel.py",
+    "src/cybernaut_mini/shard_artifacts.py",
+    "src/cybernaut_mini/storage.py",
+    "tests/test_accel.py",
+    "tests/test_index_scale.py",
+    "tests/test_shard_artifacts.py",
+    "tests/test_storage.py"
+  ],
+  "sessions": [
+    {
+      "metadata": "/f7/1694f5ef27/0/metadata.json",
+      "transcript": "/f7/1694f5ef27/0/full.jsonl",
+      "compact_transcript": "/f7/1694f5ef27/0/transcript.jsonl",
+      "content_hash": "/f7/1694f5ef27/0/content_hash.txt",
+      "prompt": "/f7/1694f5ef27/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 51,
+    "cache_creation_tokens": 133610,
+    "cache_read_tokens": 1515173,
+    "output_tokens": 11295,
+    "api_call_count": 25
+  }
+}
