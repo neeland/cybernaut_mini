@@ -1,0 +1,64 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "acdcc6470dd6",
+  "session_id": "884951e4-8b6a-4ee7-9bad-51f8e67e4559",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-14T22:04:51.273434Z",
+  "branch": "main",
+  "checkpoints_count": 2,
+  "save_step_count": 3,
+  "files_touched": [
+    "conf/prod/catalog.yml",
+    "src/cybernaut_mini/corpus.py",
+    "src/cybernaut_mini/datasets.py",
+    "src/cybernaut_mini/pipeline_registry.py",
+    "src/cybernaut_mini/pipelines/corpus_ingest/nodes.py",
+    "src/cybernaut_mini/pipelines/corpus_ingest/pipeline.py",
+    "tests/test_corpus.py"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-sonnet-4-6",
+  "turn_id": "242a0987e823",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 1475,
+    "cache_creation_tokens": 542901,
+    "cache_read_tokens": 10826395,
+    "output_tokens": 73815,
+    "api_call_count": 110
+  },
+  "session_metrics": {
+    "turn_count": 6
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-14T22:04:51.181819Z",
+    "agent_lines": 587,
+    "agent_removed": 13,
+    "human_added": 379,
+    "human_modified": 14,
+    "human_removed": 0,
+    "total_committed": 980,
+    "total_lines_changed": 993,
+    "agent_percentage": 60.42296072507553,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 1,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".claude/scheduled_tasks.lock": 1
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
