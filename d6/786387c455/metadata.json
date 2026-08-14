@@ -3,7 +3,7 @@
   "checkpoint_id": "d6786387c455",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 2,
+  "checkpoints_count": 5,
   "files_touched": [
     "conf/base/parameters.yml",
     "src/cybernaut_mini/evals.py",
@@ -25,13 +25,20 @@
       "compact_transcript": "/d6/786387c455/1/transcript.jsonl",
       "content_hash": "/d6/786387c455/1/content_hash.txt",
       "prompt": "/d6/786387c455/1/prompt.txt"
+    },
+    {
+      "metadata": "/d6/786387c455/2/metadata.json",
+      "transcript": "/d6/786387c455/2/full.jsonl",
+      "compact_transcript": "/d6/786387c455/2/transcript.jsonl",
+      "content_hash": "/d6/786387c455/2/content_hash.txt",
+      "prompt": "/d6/786387c455/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 1464,
-    "cache_creation_tokens": 568031,
-    "cache_read_tokens": 9424195,
-    "output_tokens": 57643,
-    "api_call_count": 113
+    "input_tokens": 1476,
+    "cache_creation_tokens": 573266,
+    "cache_read_tokens": 10838912,
+    "output_tokens": 59198,
+    "api_call_count": 119
   }
 }
