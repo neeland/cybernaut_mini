@@ -1,0 +1,7 @@
+<task-notification>
+<task-id>bxgn84o1g</task-id>
+<tool-use-id>toolu_018WhyXVw76sSXVYpssr3DSr</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-neelanpather-dev-cybernaut-mini/e9ca709c-178d-4ce0-a66a-b39f9e2e3050/tasks/bxgn84o1g.output</output-file>
+<status>completed</status>
+<summary>Background command "Inspect CC-News schema via streaming" completed (exit code 0)</summary>
+</task-notification>
