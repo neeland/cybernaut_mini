@@ -1,4 +1,8 @@
 # Production parameter overrides. Merged over conf/base/parameters.yml.
+#
+# corpus_ccnews and corpus_miracl field maps live in conf/base/parameters.yml
+# (populated by the corpus_ingest refactor) and need no prod override — the
+# base values are correct for both environments.
 
 embedding:
   provider: sentence_transformers
@@ -10,31 +14,24 @@ embedding:
   revision: 614241f622f53c4eeff9890bdc4f31cfecc418b3
 
 index:
-  # Shard count drives serving cost: too few and each shard is slow to search,
-  # too many and routing dominates. 256 shards over the full 100k corpus is
-  # ~390 documents per shard — chosen so shard *selection* (stages 5-7) has a
-  # few hundred candidates to discriminate between, which is the regime those
-  # stages are written for, while each shard still holds enough text for its
-  # vocabulary, bloom filter and zstd dictionary to carry signal. 64 shards
-  # (1.5k docs each) leaves routing under-exercised; 512 (195 docs each) starts
-  # to thin the per-shard artifacts.
+  # 256 shards over the ~200k-document CC-News + MIRACL corpus is ~780 docs/shard
+  # — between the under-exercised 64-shard (3k docs each) and the artifact-starved
+  # 512-shard (390 docs each) configurations. At ~780 docs/shard, each shard's
+  # vocabulary, bloom filter, and zstd dictionary all carry meaningful signal, while
+  # stage 5-7 selection has enough candidates (~256) to discriminate between. This
+  # matches the power-of-two prod convention and scales naturally if the corpus
+  # grows to 500k (still ~1,950 docs/shard, well within target range).
   n_shards: 256
   max_keywords: 50
   max_entities: 50
   cooccurrence_window: 5
   min_edge_count: 3
 
-# Field mapping for the NOSIBLE HF datasets: text / label / netloc / url.
-corpus:
-  field_map:
-    text: text
-    url: url
-  metadata_fields: [label, netloc]
-  default_language: en
-  id_prefix: pred
-  min_text_chars: 120
-
 corpus_selection:
+  # Restrict the merged CC-News + MIRACL corpus to English. CC-News rows are
+  # pre-filtered at source (filter_equals: {language: en} in the catalog), but
+  # this gate ensures any stray non-English passages are dropped before
+  # select_documents writes the 03_primary corpus.
   languages: [en]
   metadata_equals: null
   max_documents: null

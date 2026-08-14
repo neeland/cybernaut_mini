@@ -1,45 +1,88 @@
 # Production catalog overrides: `kedro run --env prod --pipeline production`.
 #
-# Only the acquisition source changes. Every downstream entry is inherited from
-# conf/base/catalog.yml unchanged, which is the point of routing data through the
-# catalog: the pipeline code that builds a 100k-document shard is the same code
-# that builds the 66-document sample.
+# Replaces the NOSIBLE/prediction source with the two real-data sources:
+#   CC-News spine   (stanford-oval/ccnews)      — ~192k English articles
+#   MIRACL corpus   (miracl/miracl-corpus en)   — ~8k passages (all qrel positives)
+# Together they form a ~200k-document, 256-shard index.
 #
 # Requires the `hf` extra:  uv sync --extra hf --extra st
-# Private/gated repos additionally need HF_TOKEN in the environment.
+# Neither dataset is gated: HF_TOKEN is not required.
 
-raw_corpus_source:
+# ------------------------------------------------------------------ #
+# 01_raw — acquisition                                                #
+# ------------------------------------------------------------------ #
+
+raw_ccnews_source:
   type: cybernaut_mini.datasets.HuggingFaceDataset
-  repo_id: NOSIBLE/prediction
-  # REQUIRED: an immutable commit SHA or tag. Branch names and this placeholder
-  # are both rejected at load time, so an unpinned corpus cannot reach a build.
-  # Resolved 2026-08-14 from:
+  repo_id: stanford-oval/ccnews
+  # SHA pinned 2026-08-14 from:
   #   uv run python -c "from huggingface_hub import HfApi; \
-  #     print(HfApi().dataset_info('NOSIBLE/prediction').sha)"
-  revision: eefc2260041afc60bb8f8e343cf43a20e7828a4a
+  #     print(HfApi().dataset_info('stanford-oval/ccnews').sha)"
+  revision: d733e654c9a506df519e1a166a86c118c7657ce4
   split: train
-  columns: [text, label, netloc, url]
-  # Uncapped: the full 100,000 rows (26.9 MB parquet, 71.4 MB in Arrow). Set
-  # max_rows to dial in a faster build; the cap is a prefix, not a sample, so a
-  # capped run is not a statistically valid preview of the full one.
+  streaming: true
+  # filter_equals is applied before islice so max_rows counts English rows only,
+  # not the full multilingual stream. Critical for CC-News which is 100M+ rows
+  # across ~90 languages.
+  filter_equals:
+    language: en
+  # 193k rows ≈ 200k target minus the ~7,921 mandatory MIRACL passages, with
+  # headroom for rows dropped by the min_text_chars filter in normalize_rows.
+  max_rows: 193000
 
-# Keep production artifacts out of the sample paths so a prod run can never
-# overwrite the committed sample index.
-raw_corpus:
+raw_ccnews:
   type: cybernaut_mini.datasets.JsonlDataset
-  filepath: data/01_raw/prediction_snapshot.jsonl
+  filepath: data/01_raw/ccnews_miracl_ccnews_snapshot.jsonl
 
-normalized_documents:
+raw_miracl_source:
+  type: cybernaut_mini.datasets.HfFileDataset
+  repo_id: miracl/miracl-corpus
+  # SHA pinned 2026-08-14 from:
+  #   uv run python -c "from huggingface_hub import HfApi; \
+  #     print(HfApi().dataset_info('miracl/miracl-corpus').sha)"
+  revision: d921ec7e349ce0d28daf30b2da9da5ee698bef0d
+  # English passages only. Docid-set filtering (to the 7,921 qrel-referenced
+  # passages) is applied inside the corpus_ingest node using the loaded qrels,
+  # not here — the node receives both sources and can pass filter_values at
+  # runtime. The raw snapshot holds only the filtered passages (01_raw principle:
+  # never re-download, nodes.py:38).
+  path_pattern: "miracl-corpus-v1.0-en/*.jsonl.gz"
+
+raw_miracl:
   type: cybernaut_mini.datasets.JsonlDataset
-  filepath: data/02_intermediate/prediction_documents.jsonl
+  filepath: data/01_raw/ccnews_miracl_miracl_snapshot.jsonl
+
+# ------------------------------------------------------------------ #
+# 02_intermediate — normalised to the Document schema                 #
+# ------------------------------------------------------------------ #
+
+normalized_ccnews:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/02_intermediate/ccnews_miracl_ccnews_documents.jsonl
+
+normalized_miracl:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/02_intermediate/ccnews_miracl_miracl_documents.jsonl
+
+merged_documents:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/02_intermediate/ccnews_miracl_merged_documents.jsonl
+
+# ------------------------------------------------------------------ #
+# 03_primary — the build-ready corpus                                 #
+# ------------------------------------------------------------------ #
 
 documents:
   type: cybernaut_mini.datasets.JsonlDataset
-  filepath: ${runtime_params:input_path,data/03_primary/prediction_corpus.jsonl}
+  filepath: ${runtime_params:input_path,data/03_primary/ccnews_miracl_corpus.jsonl}
+
+# ------------------------------------------------------------------ #
+# The index                                                           #
+# ------------------------------------------------------------------ #
 
 shard_index:
   type: cybernaut_mini.datasets.ShardIndexDataset
-  filepath: ${runtime_params:index_path,artifacts/prediction}
+  filepath: ${runtime_params:index_path,artifacts/ccnews-miracl-200k}
 
 # ------------------------------------------------------------------ #
 # MIRACL en-dev judgment pipeline (task #5 / M1.4)                   #
