@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import sys
+import types
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -14,6 +17,36 @@ from cybernaut_mini.datasets import (
     ShardIndexDataset,
 )
 from cybernaut_mini.indexing import LoadedIndex
+
+# ------------------------------------------------------------------ #
+# Helpers for streaming tests                                         #
+# ------------------------------------------------------------------ #
+
+_PINNED_SHA = "0123456789abcdef0123456789abcdef01234567"
+
+
+class _FakeIterableDataset:
+    """Minimal stand-in for datasets.IterableDataset in streaming mode."""
+
+    def __init__(self, rows: list[dict[str, Any]], features: dict[str, Any] | None) -> None:
+        self._rows = rows
+        # Mirrors IterableDataset.features: a dict-like object or None.
+        self.features = features
+
+    def __iter__(self) -> Any:
+        return iter(self._rows)
+
+
+def _install_fake_datasets(
+    monkeypatch: pytest.MonkeyPatch,
+    rows: list[dict[str, Any]],
+    features: dict[str, Any] | None,
+) -> None:
+    """Inject a fake `datasets` module so load() never hits the network."""
+    iterable = _FakeIterableDataset(rows, features)
+    fake = types.ModuleType("datasets")
+    fake.load_dataset = lambda *a, **kw: iterable  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "datasets", fake)
 
 
 def test_canonical_json_round_trip_and_bytes(tmp_path: Path) -> None:
@@ -225,3 +258,141 @@ def test_missing_input_error_names_both_recoveries(tmp_path: Path) -> None:
 
     assert "corpus_ingest" in message, "should name the pipeline that produces it"
     assert "input_path" in message, "should name the override for an existing corpus"
+
+
+# ------------------------------------------------------------------ #
+# HuggingFaceDataset — streaming mode                                 #
+# ------------------------------------------------------------------ #
+
+
+def test_streaming_revision_guards_still_fire_for_mutable_ref() -> None:
+    """The SHA-pinning check is at __init__ time and must not be skipped for streaming."""
+    with pytest.raises(DatasetError, match="immutable"):
+        HuggingFaceDataset(repo_id="test/repo", revision="main", streaming=True)
+
+
+def test_streaming_placeholder_revision_is_rejected() -> None:
+    with pytest.raises(DatasetError, match="placeholder"):
+        HuggingFaceDataset(
+            repo_id="test/repo", revision="REPLACE_WITH_COMMIT_SHA", streaming=True
+        )
+
+
+def test_streaming_appears_in_describe() -> None:
+    ds = HuggingFaceDataset(repo_id="test/repo", revision=_PINNED_SHA, streaming=True)
+    described = ds._describe()
+    assert described["streaming"] is True
+
+
+def test_non_streaming_describe_includes_streaming_false() -> None:
+    ds = HuggingFaceDataset(repo_id="test/repo", revision=_PINNED_SHA)
+    assert ds._describe()["streaming"] is False
+
+
+def test_streaming_returns_all_rows_when_no_max(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [{"text": f"doc {i}", "url": f"https://x.com/{i}"} for i in range(8)]
+    _install_fake_datasets(monkeypatch, rows, features={"text": None, "url": None})
+
+    ds = HuggingFaceDataset(repo_id="test/repo", revision=_PINNED_SHA, streaming=True)
+    result = ds.load()
+    assert len(result) == 8
+    assert result[0] == {"text": "doc 0", "url": "https://x.com/0"}
+
+
+def test_streaming_slices_stop_at_max_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [{"text": f"doc {i}"} for i in range(20)]
+    _install_fake_datasets(monkeypatch, rows, features={"text": None})
+
+    ds = HuggingFaceDataset(
+        repo_id="test/repo", revision=_PINNED_SHA, max_rows=5, streaming=True
+    )
+    result = ds.load()
+    assert len(result) == 5
+    assert [r["text"] for r in result] == ["doc 0", "doc 1", "doc 2", "doc 3", "doc 4"]
+
+
+def test_streaming_column_projection_via_features(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [{"text": "hello", "url": "https://x.com", "extra": "drop me"}]
+    _install_fake_datasets(
+        monkeypatch, rows, features={"text": None, "url": None, "extra": None}
+    )
+
+    ds = HuggingFaceDataset(
+        repo_id="test/repo",
+        revision=_PINNED_SHA,
+        columns=["text", "url"],
+        streaming=True,
+    )
+    result = ds.load()
+    assert result == [{"text": "hello", "url": "https://x.com"}]
+
+
+def test_streaming_missing_column_raises_via_features(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [{"text": "hello"}]
+    _install_fake_datasets(monkeypatch, rows, features={"text": None})
+
+    ds = HuggingFaceDataset(
+        repo_id="test/repo",
+        revision=_PINNED_SHA,
+        columns=["text", "no_such_col"],
+        streaming=True,
+    )
+    with pytest.raises(DatasetError, match="absent"):
+        ds.load()
+
+
+def test_streaming_missing_column_falls_back_to_first_row_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When features is None the loader peeks at the first row for column discovery."""
+    rows = [{"text": "hello"}]
+    _install_fake_datasets(monkeypatch, rows, features=None)  # force first-row fallback
+
+    ds = HuggingFaceDataset(
+        repo_id="test/repo",
+        revision=_PINNED_SHA,
+        columns=["text", "no_such_col"],
+        streaming=True,
+    )
+    with pytest.raises(DatasetError, match="absent"):
+        ds.load()
+
+
+def test_streaming_first_row_not_dropped_when_features_is_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The row consumed to discover the schema must be re-inserted into the result."""
+    rows = [{"text": "first"}, {"text": "second"}]
+    _install_fake_datasets(monkeypatch, rows, features=None)
+
+    ds = HuggingFaceDataset(
+        repo_id="test/repo",
+        revision=_PINNED_SHA,
+        columns=["text"],
+        streaming=True,
+    )
+    result = ds.load()
+    assert [r["text"] for r in result] == ["first", "second"]
+
+
+def test_streaming_empty_dataset_with_features_none_returns_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_datasets(monkeypatch, rows=[], features=None)
+
+    ds = HuggingFaceDataset(
+        repo_id="test/repo",
+        revision=_PINNED_SHA,
+        columns=["text"],
+        streaming=True,
+    )
+    assert ds.load() == []
+
+
+def test_streaming_no_columns_no_max_returns_all(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [{"a": i, "b": i * 2} for i in range(3)]
+    _install_fake_datasets(monkeypatch, rows, features=None)
+
+    ds = HuggingFaceDataset(repo_id="test/repo", revision=_PINNED_SHA, streaming=True)
+    result = ds.load()
+    assert result == rows

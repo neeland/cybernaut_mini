@@ -141,6 +141,25 @@ class HuggingFaceDataset(AbstractDataset[None, list[dict[str, Any]]]):
     name: a production shard is only reproducible if the corpus it was built from
     is pinned. ``main`` is rejected outright.
 
+    Set ``streaming=True`` for large datasets (CC-News is hundreds of GB in full):
+    the loader opens an :class:`~datasets.IterableDataset` over Arrow shards and
+    uses :func:`itertools.islice` so only ``max_rows`` rows are downloaded rather
+    than materialising a whole shard boundary.
+
+    Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — CC-News as a
+        corpus source; 200k-document builds are the target scale (Phase 1.2).
+
+    Assumptions: ``IterableDataset.features`` is populated from the dataset's
+        Arrow schema metadata without iterating rows, so the missing-column check
+        can inspect it before consuming any data. When ``features`` is ``None``
+        (a dynamically typed transform was chained upstream), the check falls back
+        to the first row's keys and re-inserts that row so nothing is lost.
+
+    Alternatives rejected: using ``IterableDataset.select_columns`` for projection
+        in streaming mode. Supported since ``datasets>=2.4`` but adds another lazy
+        wrapper; a per-row dict comprehension is simpler and independent of the
+        exact ``datasets`` API version.
+
     Requires the ``hf`` extra (``uv sync --extra hf``). The import is deferred to
     :meth:`load` so the core package — and the whole offline test suite — never
     depends on it.
@@ -160,6 +179,7 @@ class HuggingFaceDataset(AbstractDataset[None, list[dict[str, Any]]]):
         columns: list[str] | None = None,
         max_rows: int | None = None,
         token_env: str = "HF_TOKEN",
+        streaming: bool = False,
     ) -> None:
         normalized_ref = (revision or "").strip().lower()
         if normalized_ref == self._PLACEHOLDER_REF:
@@ -183,6 +203,7 @@ class HuggingFaceDataset(AbstractDataset[None, list[dict[str, Any]]]):
         self._columns = columns
         self._max_rows = max_rows
         self._token_env = token_env
+        self._streaming = streaming
 
     def load(self) -> list[dict[str, Any]]:
         try:
@@ -199,6 +220,12 @@ class HuggingFaceDataset(AbstractDataset[None, list[dict[str, Any]]]):
         # A private repo needs a token; a public one must still work without it.
         token = os.environ.get(self._token_env) or None
 
+        if self._streaming:
+            return self._load_streaming(load_dataset, token)
+        return self._load_eager(load_dataset, token)
+
+    def _load_eager(self, load_dataset: Any, token: str | None) -> list[dict[str, Any]]:
+        """Non-streaming path: byte-identical to the original implementation."""
         split = self._split
         if self._max_rows is not None:
             # Slice in the split spec so only the requested rows are materialised.
@@ -223,6 +250,50 @@ class HuggingFaceDataset(AbstractDataset[None, list[dict[str, Any]]]):
         rows: list[dict[str, Any]] = [dict(row) for row in dataset]
         return rows
 
+    def _load_streaming(self, load_dataset: Any, token: str | None) -> list[dict[str, Any]]:
+        """Streaming path: opens an IterableDataset and slices with islice."""
+        import itertools
+
+        dataset = load_dataset(
+            self._repo_id,
+            revision=self._revision,
+            split=self._split,
+            token=token,
+            streaming=True,
+        )
+
+        it: Any = iter(dataset)
+
+        if self._columns is not None:
+            # Prefer features (populated from Arrow schema, no rows consumed).
+            features = getattr(dataset, "features", None)
+            if features is not None:
+                available = set(features.keys())
+            else:
+                # Fall back to the first row's keys; re-insert it so nothing is lost.
+                try:
+                    first_row = next(it)
+                except StopIteration:
+                    return []
+                available = set(first_row.keys())
+                it = itertools.chain([first_row], it)
+
+            missing = set(self._columns) - available
+            if missing:
+                msg = (
+                    f"HuggingFaceDataset({self._repo_id!r}): requested columns "
+                    f"{sorted(missing)} are absent; available: {sorted(available)}"
+                )
+                raise DatasetError(msg)
+
+        if self._max_rows is not None:
+            it = itertools.islice(it, self._max_rows)
+
+        if self._columns is not None:
+            cols = self._columns
+            return [{col: row[col] for col in cols} for row in it]
+        return [dict(row) for row in it]
+
     def save(self, data: None) -> None:
         msg = (
             f"HuggingFaceDataset({self._repo_id!r}) is read-only; write the "
@@ -242,6 +313,7 @@ class HuggingFaceDataset(AbstractDataset[None, list[dict[str, Any]]]):
             "split": self._split,
             "columns": self._columns,
             "max_rows": self._max_rows,
+            "streaming": self._streaming,
         }
 
 
