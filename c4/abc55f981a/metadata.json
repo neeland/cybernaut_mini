@@ -3,7 +3,7 @@
   "checkpoint_id": "c4abc55f981a",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 3,
+  "checkpoints_count": 11,
   "files_touched": [
     "src/cybernaut_mini/query/__init__.py",
     "src/cybernaut_mini/query/s1_language/__init__.py",
@@ -66,13 +66,20 @@
       "compact_transcript": "/c4/abc55f981a/0/transcript.jsonl",
       "content_hash": "/c4/abc55f981a/0/content_hash.txt",
       "prompt": "/c4/abc55f981a/0/prompt.txt"
+    },
+    {
+      "metadata": "/c4/abc55f981a/1/metadata.json",
+      "transcript": "/c4/abc55f981a/1/full.jsonl",
+      "compact_transcript": "/c4/abc55f981a/1/transcript.jsonl",
+      "content_hash": "/c4/abc55f981a/1/content_hash.txt",
+      "prompt": "/c4/abc55f981a/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 51,
-    "cache_creation_tokens": 133610,
-    "cache_read_tokens": 1515173,
-    "output_tokens": 11295,
-    "api_call_count": 25
+    "input_tokens": 19853,
+    "cache_creation_tokens": 1276138,
+    "cache_read_tokens": 14108125,
+    "output_tokens": 108792,
+    "api_call_count": 144
   }
 }

@@ -1,0 +1,319 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "c4abc55f981a",
+  "session_id": "fe85e871-867f-418d-ab44-4730999345ce",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-14T21:32:13.066983Z",
+  "branch": "main",
+  "checkpoints_count": 8,
+  "save_step_count": 8,
+  "files_touched": [
+    "src/cybernaut_mini/query/__init__.py",
+    "src/cybernaut_mini/query/s1_language/__init__.py",
+    "src/cybernaut_mini/query/s1_language/detect.py",
+    "src/cybernaut_mini/query/s1_language/prepare.py",
+    "src/cybernaut_mini/query/s1_language/translate.py",
+    "src/cybernaut_mini/query/s2_tokenize/__init__.py",
+    "src/cybernaut_mini/query/s2_tokenize/languages.py",
+    "src/cybernaut_mini/query/s2_tokenize/segmentation.py",
+    "src/cybernaut_mini/query/s2_tokenize/stemming.py",
+    "src/cybernaut_mini/query/s2_tokenize/stopwords.py",
+    "src/cybernaut_mini/query/s2_tokenize/tokenizer.py",
+    "src/cybernaut_mini/query/s3_intents/__init__.py",
+    "src/cybernaut_mini/query/s3_intents/function_words.py",
+    "src/cybernaut_mini/query/s3_intents/intents.py",
+    "src/cybernaut_mini/query/s3_intents/scoring.py",
+    "src/cybernaut_mini/query/s3_intents/tokens.py",
+    "src/cybernaut_mini/query/s4_instruct/__init__.py",
+    "src/cybernaut_mini/query/s4_instruct/e5.py",
+    "src/cybernaut_mini/query/s4_instruct/selection.py",
+    "src/cybernaut_mini/query/s4_instruct/templates.py",
+    "src/cybernaut_mini/query/s4_instruct/writer.py",
+    "src/cybernaut_mini/query/s5_select/__init__.py",
+    "src/cybernaut_mini/query/s5_select/dense.py",
+    "src/cybernaut_mini/query/s5_select/selector.py",
+    "src/cybernaut_mini/query/s5_select/sparse.py",
+    "src/cybernaut_mini/query/s6_rerank/__init__.py",
+    "src/cybernaut_mini/query/s6_rerank/base.py",
+    "src/cybernaut_mini/query/s6_rerank/bloom.py",
+    "src/cybernaut_mini/query/s6_rerank/candidates.py",
+    "src/cybernaut_mini/query/s6_rerank/compression.py",
+    "src/cybernaut_mini/query/s6_rerank/fusion.py",
+    "src/cybernaut_mini/query/s6_rerank/neural.py",
+    "src/cybernaut_mini/query/s6_rerank/pagerank.py",
+    "src/cybernaut_mini/query/s7_expand/__init__.py",
+    "src/cybernaut_mini/query/s7_expand/expand.py",
+    "src/cybernaut_mini/query/s7_expand/filters.py",
+    "src/cybernaut_mini/query/s7_expand/graph.py",
+    "src/cybernaut_mini/query/s7_expand/question.py",
+    "src/cybernaut_mini/query/s7_expand/selection.py",
+    "src/cybernaut_mini/query/s8_retrieve/__init__.py",
+    "src/cybernaut_mini/query/s8_retrieve/intent_scan.py",
+    "src/cybernaut_mini/query/s8_retrieve/mapreduce.py",
+    "src/cybernaut_mini/query/s8_retrieve/pipeline.py",
+    "src/cybernaut_mini/query/s8_retrieve/refine.py",
+    "src/cybernaut_mini/query/s8_retrieve/snippets.py",
+    "tests/test_s1_language.py",
+    "tests/test_s2_tokenize.py",
+    "tests/test_s3_intents.py",
+    "tests/test_s4_instruct.py",
+    "tests/test_s5_select.py",
+    "tests/test_s7_expand.py",
+    "tests/test_s8_retrieve.py",
+    "tests/test_term_graph.py"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "63823714434a",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 19802,
+    "cache_creation_tokens": 1142528,
+    "cache_read_tokens": 12592952,
+    "output_tokens": 97497,
+    "api_call_count": 119
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_01YBvyFpHnt6HU7jPBbs96dV",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "oh-my-claudecode:plan"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "63823714434a",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1010,
+        "end": 1011,
+        "entry_ids": [
+          "22d1c441-0058-40f0-a774-c6c749ec82e4"
+        ],
+        "tool_use_id": "toolu_01YBvyFpHnt6HU7jPBbs96dV"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01YBvyFpHnt6HU7jPBbs96dV"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: oh-my-claudecode:plan",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01RFnJTKKVXLYf1NtYAvyWR9",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "oh-my-claudecode:team"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "63823714434a",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1169,
+        "end": 1170,
+        "entry_ids": [
+          "b4114fcf-9a17-48c1-896c-9628f1c5e0ff"
+        ],
+        "tool_use_id": "toolu_01RFnJTKKVXLYf1NtYAvyWR9"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01RFnJTKKVXLYf1NtYAvyWR9"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: oh-my-claudecode:team",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 8
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-14T21:32:12.968372Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 0,
+    "total_lines_changed": 0,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 22008,
+      "user_lines_removed": 870,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".env.example": 16,
+        "Makefile": 16,
+        "ONBOARDING.md": 57,
+        "README.md": 89,
+        "conf/prod/catalog.yml": 5,
+        "conf/prod/parameters.yml": 11,
+        "pyproject.toml": 38,
+        "scripts/check": 16,
+        "scripts/preso.sh": 637,
+        "scripts/setup_mac.sh": 133,
+        "scripts/sync_env.py": 10,
+        "scripts/with-accel.sh": 55,
+        "src/cybernaut_mini/accel.py": 336,
+        "src/cybernaut_mini/config.py": 12,
+        "src/cybernaut_mini/expansion.py": 147,
+        "src/cybernaut_mini/indexing.py": 896,
+        "src/cybernaut_mini/models.py": 63,
+        "src/cybernaut_mini/pipelines/index_build/nodes.py": 37,
+        "src/cybernaut_mini/providers/embeddings.py": 15,
+        "src/cybernaut_mini/query/__init__.py": 57,
+        "src/cybernaut_mini/query/s1_language/__init__.py": 69,
+        "src/cybernaut_mini/query/s1_language/detect.py": 164,
+        "src/cybernaut_mini/query/s1_language/prepare.py": 165,
+        "src/cybernaut_mini/query/s1_language/translate.py": 360,
+        "src/cybernaut_mini/query/s2_tokenize/__init__.py": 66,
+        "src/cybernaut_mini/query/s2_tokenize/languages.py": 212,
+        "src/cybernaut_mini/query/s2_tokenize/segmentation.py": 221,
+        "src/cybernaut_mini/query/s2_tokenize/stemming.py": 160,
+        "src/cybernaut_mini/query/s2_tokenize/stopwords.py": 161,
+        "src/cybernaut_mini/query/s2_tokenize/tokenizer.py": 356,
+        "src/cybernaut_mini/query/s3_intents/__init__.py": 88,
+        "src/cybernaut_mini/query/s3_intents/function_words.py": 231,
+        "src/cybernaut_mini/query/s3_intents/intents.py": 291,
+        "src/cybernaut_mini/query/s3_intents/scoring.py": 174,
+        "src/cybernaut_mini/query/s3_intents/tokens.py": 244,
+        "src/cybernaut_mini/query/s4_instruct/__init__.py": 95,
+        "src/cybernaut_mini/query/s4_instruct/e5.py": 130,
+        "src/cybernaut_mini/query/s4_instruct/selection.py": 129,
+        "src/cybernaut_mini/query/s4_instruct/templates.py": 442,
+        "src/cybernaut_mini/query/s4_instruct/writer.py": 252,
+        "src/cybernaut_mini/query/s5_select/__init__.py": 99,
+        "src/cybernaut_mini/query/s5_select/dense.py": 342,
+        "src/cybernaut_mini/query/s5_select/selector.py": 440,
+        "src/cybernaut_mini/query/s5_select/sparse.py": 262,
+        "src/cybernaut_mini/query/s6_rerank/__init__.py": 124,
+        "src/cybernaut_mini/query/s6_rerank/base.py": 198,
+        "src/cybernaut_mini/query/s6_rerank/bloom.py": 91,
+        "src/cybernaut_mini/query/s6_rerank/candidates.py": 92,
+        "src/cybernaut_mini/query/s6_rerank/compression.py": 71,
+        "src/cybernaut_mini/query/s6_rerank/fusion.py": 267,
+        "src/cybernaut_mini/query/s6_rerank/neural.py": 168,
+        "src/cybernaut_mini/query/s6_rerank/pagerank.py": 224,
+        "src/cybernaut_mini/query/s7_expand/__init__.py": 134,
+        "src/cybernaut_mini/query/s7_expand/expand.py": 285,
+        "src/cybernaut_mini/query/s7_expand/filters.py": 207,
+        "src/cybernaut_mini/query/s7_expand/graph.py": 161,
+        "src/cybernaut_mini/query/s7_expand/question.py": 91,
+        "src/cybernaut_mini/query/s7_expand/selection.py": 226,
+        "src/cybernaut_mini/query/s8_retrieve/__init__.py": 121,
+        "src/cybernaut_mini/query/s8_retrieve/intent_scan.py": 302,
+        "src/cybernaut_mini/query/s8_retrieve/mapreduce.py": 460,
+        "src/cybernaut_mini/query/s8_retrieve/pipeline.py": 270,
+        "src/cybernaut_mini/query/s8_retrieve/refine.py": 173,
+        "src/cybernaut_mini/query/s8_retrieve/snippets.py": 140,
+        "src/cybernaut_mini/retrieval.py": 169,
+        "src/cybernaut_mini/routing.py": 271,
+        "src/cybernaut_mini/shard_artifacts.py": 543,
+        "src/cybernaut_mini/storage.py": 788,
+        "tests/conftest.py": 14,
+        "tests/test_accel.py": 273,
+        "tests/test_build.py": 451,
+        "tests/test_index_scale.py": 576,
+        "tests/test_models.py": 115,
+        "tests/test_retrieval.py": 45,
+        "tests/test_routing.py": 114,
+        "tests/test_s1_language.py": 733,
+        "tests/test_s2_tokenize.py": 594,
+        "tests/test_s3_intents.py": 469,
+        "tests/test_s4_instruct.py": 548,
+        "tests/test_s5_select.py": 813,
+        "tests/test_s7_expand.py": 728,
+        "tests/test_s8_retrieve.py": 880,
+        "tests/test_shard_artifacts.py": 518,
+        "tests/test_storage.py": 799,
+        "tests/test_term_graph.py": 608,
+        "uv.lock": 355
+      },
+      "user_removed_per_file": {
+        "Makefile": 1,
+        "README.md": 8,
+        "conf/prod/catalog.yml": 4,
+        "conf/prod/parameters.yml": 6,
+        "src/cybernaut_mini/expansion.py": 74,
+        "src/cybernaut_mini/indexing.py": 106,
+        "src/cybernaut_mini/models.py": 1,
+        "src/cybernaut_mini/pipelines/index_build/nodes.py": 6,
+        "src/cybernaut_mini/providers/embeddings.py": 1,
+        "src/cybernaut_mini/retrieval.py": 423,
+        "src/cybernaut_mini/routing.py": 181,
+        "tests/conftest.py": 4,
+        "tests/test_retrieval.py": 49,
+        "tests/test_routing.py": 5,
+        "uv.lock": 1
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 22008,
+      "agent_lines_removed": 870
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 22008,
+      "agent_lines_removed": 870
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 22008,
+      "agent_lines_removed": 870
+    },
+    {
+      "checkpoint_number": 5,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 6,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 7,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 8,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
