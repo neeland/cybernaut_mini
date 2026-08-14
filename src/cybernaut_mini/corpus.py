@@ -48,7 +48,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from cybernaut_mini.models import Document
+from cybernaut_mini.models import Document, Judgment
 
 #: Cap on a derived title. Long enough to be a useful routing signal, short enough
 #: that it does not swamp the body text when the two are concatenated for embedding.
@@ -181,3 +181,116 @@ def normalize_rows(
         )
 
     return [documents[key] for key in sorted(documents)]
+
+
+# ------------------------------------------------------------------ #
+# MIRACL qrels → Judgment loader                                      #
+# ------------------------------------------------------------------ #
+
+_MIRACL_ID_PREFIX = "mir"
+
+
+def load_miracl_judgments(rows: list[dict[str, Any]]) -> list[Judgment]:
+    """Map structured MIRACL en-dev rows onto :class:`~cybernaut_mini.models.Judgment` records.
+
+    The catalog entry for ``miracl_en_dev_source`` is backed by
+    ``HuggingFaceDataset("miracl/miracl", config="en", split="dev")``, which returns
+    rows with four fields: ``query_id`` (str), ``query`` (str), ``positive_passages``
+    (list of ``{docid, title, text}`` with relevance grade=1), and
+    ``negative_passages`` (list of ``{docid, title, text}`` with relevance grade=0).
+
+    Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — the evaluation
+        substrate used to record per-mode recall/nDCG/MRR baselines. Local copy:
+        ``data/00_reference/the-road-to-cybernaut-1.md``.
+
+    Assumptions:
+        - ``relevant_document_ids`` holds ALL graded docids (both 0 and 1), not only
+          the positives. The Judgment model stores ``dict[str, int]`` so both grades
+          survive; downstream eval nodes compute nDCG correctly from the full set.
+        - Docids are keyed as ``make_document_id("mir", passage["docid"])`` to match
+          the ``id_prefix="mir"`` used by the MIRACL corpus ingest branch. A judgment
+          whose docids use bare MIRACL strings would never match any Document.id.
+        - A query row with zero assessments (empty positive AND negative lists) is
+          silently skipped rather than raised on; MIRACL en-dev has none of these, but
+          robustness beats a fragile length check.
+
+    Alternatives rejected:
+        - Accepting raw TSV bytes (``{query_id}\\t{question}`` + TREC qrel format) as
+          two separate function arguments. Rejected because the structured
+          ``miracl/miracl`` Hub dataset gives the same information already parsed, so
+          separate TSV parsing adds code without adding insight.
+        - Including only grade=1 docids. Rejected because nDCG requires the full
+          relevance pool to distinguish true negatives (grade=0 but retrieved) from
+          un-judged documents.
+
+    Raises :class:`ValueError` when ``rows`` is empty (a configuration error — an
+    empty MIRACL source is never valid).
+    """
+    if not rows:
+        msg = "MIRACL source returned zero rows; cannot build judgments from an empty dataset"
+        raise ValueError(msg)
+
+    judgments: list[Judgment] = []
+    for row in rows:
+        query_id = str(row["query_id"])
+        question = str(row.get("query", ""))
+
+        relevant: dict[str, int] = {}
+        for passage in row.get("positive_passages", []):
+            doc_id = make_document_id(_MIRACL_ID_PREFIX, str(passage["docid"]))
+            relevant[doc_id] = 1
+        for passage in row.get("negative_passages", []):
+            doc_id = make_document_id(_MIRACL_ID_PREFIX, str(passage["docid"]))
+            relevant[doc_id] = 0
+
+        if not relevant:
+            # A query with no assessed passages contributes nothing to evaluation.
+            continue
+
+        judgments.append(
+            Judgment(
+                query_id=query_id,
+                question=question,
+                relevant_document_ids=relevant,
+            )
+        )
+
+    return judgments
+
+
+def validate_judgments_against_corpus(
+    judgments: list[Judgment],
+    corpus_doc_ids: set[str],
+) -> None:
+    """Assert every judgment docid exists in the built corpus.
+
+    Raises :class:`ValueError` listing up to 20 missing docids so the operator
+    can diagnose which MIRACL passages were dropped by the corpus filter step.
+
+    Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — acceptance
+        criterion: "Every docid in miracl_en_dev_judgments.jsonl exists in the
+        built index." A judgment over a missing doc silently caps recall.
+
+    Assumptions: the corpus ids are passed as a ``set`` so the ``in`` check is O(1)
+        per docid rather than O(n). Building the set once before calling this is the
+        caller's responsibility.
+
+    Alternatives rejected: returning the list of missing ids and leaving it to the
+        caller to decide whether to raise. Rejected because a missing docid is never
+        acceptable — it would silently cap recall — so failing loudly is the only
+        correct behaviour.
+    """
+    missing: list[str] = []
+    for judgment in judgments:
+        for doc_id in judgment.relevant_document_ids:
+            if doc_id not in corpus_doc_ids:
+                missing.append(doc_id)
+
+    if missing:
+        sample = sorted(missing)[:20]
+        msg = (
+            f"validate_judgments: {len(missing)} judgment docid(s) absent from corpus "
+            f"(first 20): {sample}. "
+            f"Ensure the MIRACL corpus branch snapshots all qrels docids before selection."
+        )
+        raise ValueError(msg)

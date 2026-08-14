@@ -10,13 +10,18 @@ from cybernaut_mini.corpus import (
     CorpusNormalizeError,
     CorpusSourceConfig,
     derive_title,
+    load_miracl_judgments,
     make_document_id,
     normalize_rows,
+    validate_judgments_against_corpus,
 )
+from cybernaut_mini.models import Judgment
 from cybernaut_mini.pipelines.corpus_ingest.nodes import (
+    build_miracl_judgments,
     normalize_corpus,
     select_documents,
     snapshot_raw_corpus,
+    validate_judgments,
 )
 
 # Mirrors the NOSIBLE Hugging Face schema: text / label / netloc / url.
@@ -208,3 +213,126 @@ def test_normalized_documents_survive_a_real_index_build() -> None:
         d.model_dump(mode="json") for d in normalize_rows([_row(i) for i in range(6)], _HF_CONFIG)
     ]
     assert len(ingest_documents(documents)) == 6
+
+
+# ------------------------------------------------------------------ #
+# MIRACL → Judgment loader                                            #
+# ------------------------------------------------------------------ #
+
+
+def _miracl_row(
+    query_id: str,
+    question: str,
+    positives: list[str],
+    negatives: list[str] | None = None,
+) -> dict[str, Any]:
+    """Build a minimal structured MIRACL row (as load_dataset would return)."""
+    return {
+        "query_id": query_id,
+        "query": question,
+        "positive_passages": [{"docid": d, "title": "", "text": ""} for d in positives],
+        "negative_passages": [{"docid": d, "title": "", "text": ""} for d in (negatives or [])],
+    }
+
+
+def test_load_miracl_judgments_maps_query_id_and_question() -> None:
+    rows = [_miracl_row("42", "What is the speed of light?", ["12#0"])]
+    judgments = load_miracl_judgments(rows)
+    assert len(judgments) == 1
+    assert judgments[0].query_id == "42"
+    assert judgments[0].question == "What is the speed of light?"
+
+
+def test_load_miracl_judgments_prefixes_docids_with_mir() -> None:
+    rows = [_miracl_row("1", "Q?", positives=["12#0"], negatives=["99#1"])]
+    judgments = load_miracl_judgments(rows)
+    doc_ids = set(judgments[0].relevant_document_ids.keys())
+    expected_pos = make_document_id("mir", "12#0")
+    expected_neg = make_document_id("mir", "99#1")
+    assert expected_pos in doc_ids
+    assert expected_neg in doc_ids
+    # All ids start with the mir prefix
+    assert all(k.startswith("mir-") for k in doc_ids)
+
+
+def test_load_miracl_judgments_preserves_grades() -> None:
+    rows = [_miracl_row("1", "Q?", positives=["12#0"], negatives=["99#1"])]
+    judgments = load_miracl_judgments(rows)
+    pos_id = make_document_id("mir", "12#0")
+    neg_id = make_document_id("mir", "99#1")
+    assert judgments[0].relevant_document_ids[pos_id] == 1
+    assert judgments[0].relevant_document_ids[neg_id] == 0
+
+
+def test_load_miracl_judgments_skips_rows_with_no_assessments() -> None:
+    rows = [
+        _miracl_row("1", "has passages", positives=["12#0"]),
+        _miracl_row("2", "no passages", positives=[], negatives=[]),
+    ]
+    judgments = load_miracl_judgments(rows)
+    assert len(judgments) == 1
+    assert judgments[0].query_id == "1"
+
+
+def test_load_miracl_judgments_raises_on_empty_input() -> None:
+    with pytest.raises(ValueError, match="zero rows"):
+        load_miracl_judgments([])
+
+
+def test_load_miracl_judgments_returns_valid_judgment_models() -> None:
+    rows = [_miracl_row("7", "Q?", positives=["5#0", "5#1"])]
+    judgments = load_miracl_judgments(rows)
+    assert all(isinstance(j, Judgment) for j in judgments)
+
+
+def test_validate_judgments_against_corpus_passes_when_all_present() -> None:
+    rows = [_miracl_row("1", "Q?", positives=["12#0"])]
+    judgments = load_miracl_judgments(rows)
+    doc_id = make_document_id("mir", "12#0")
+    # No exception should be raised when the corpus contains the id.
+    validate_judgments_against_corpus(judgments, corpus_doc_ids={doc_id})
+
+
+def test_validate_judgments_against_corpus_raises_on_missing_docid() -> None:
+    rows = [_miracl_row("1", "Q?", positives=["12#0"])]
+    judgments = load_miracl_judgments(rows)
+    with pytest.raises(ValueError, match="absent from corpus"):
+        validate_judgments_against_corpus(judgments, corpus_doc_ids=set())
+
+
+def test_validate_judgments_against_corpus_lists_missing_ids_in_error() -> None:
+    rows = [_miracl_row("1", "Q?", positives=["12#0", "13#0"])]
+    judgments = load_miracl_judgments(rows)
+    with pytest.raises(ValueError, match="mir-"):
+        validate_judgments_against_corpus(judgments, corpus_doc_ids=set())
+
+
+# ------------------------------------------------------------------ #
+# Kedro node wrappers                                                 #
+# ------------------------------------------------------------------ #
+
+
+def test_build_miracl_judgments_node_returns_serialisable_dicts() -> None:
+    rows = [_miracl_row("1", "Q?", positives=["12#0"])]
+    result = build_miracl_judgments(rows)
+    assert isinstance(result, list)
+    assert isinstance(result[0], dict)
+    assert result[0]["query_id"] == "1"
+    assert isinstance(result[0]["relevant_document_ids"], dict)
+
+
+def test_validate_judgments_node_passes_through_when_corpus_matches() -> None:
+    rows = [_miracl_row("1", "Q?", positives=["12#0"])]
+    judgment_dicts = build_miracl_judgments(rows)
+    doc_id = make_document_id("mir", "12#0")
+    documents = [{"id": doc_id, "title": "T", "text": "Body text here.", "language": "en"}]
+    result = validate_judgments(judgment_dicts, documents)
+    # Node is a pass-through on success
+    assert result == judgment_dicts
+
+
+def test_validate_judgments_node_raises_on_missing_doc() -> None:
+    rows = [_miracl_row("1", "Q?", positives=["missing#0"])]
+    judgment_dicts = build_miracl_judgments(rows)
+    with pytest.raises(ValueError, match="absent from corpus"):
+        validate_judgments(judgment_dicts, documents=[])

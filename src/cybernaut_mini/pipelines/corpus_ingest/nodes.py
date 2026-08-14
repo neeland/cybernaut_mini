@@ -31,7 +31,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from cybernaut_mini.corpus import CorpusSourceConfig, normalize_rows
+from cybernaut_mini.corpus import (
+    CorpusSourceConfig,
+    load_miracl_judgments,
+    normalize_rows,
+    validate_judgments_against_corpus,
+)
 from cybernaut_mini.models import Document
 
 
@@ -62,6 +67,92 @@ def normalize_corpus(
         )
         raise ValueError(msg)
     return [doc.model_dump(mode="json") for doc in documents]
+
+
+def build_miracl_judgments(
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Convert structured MIRACL en-dev rows to serialisable Judgment dicts.
+
+    A Kedro node wrapper around :func:`cybernaut_mini.corpus.load_miracl_judgments`.
+    The catalog entry ``miracl_en_dev_source`` supplies the rows; the output is
+    written to the ``judgments`` catalog entry for downstream evaluation.
+    """
+    judgments = load_miracl_judgments(rows)
+    return [j.model_dump(mode="json") for j in judgments]
+
+
+def validate_judgments(
+    judgments: list[dict[str, Any]],
+    documents: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Assert every judgment docid exists in the corpus; pass judgments through.
+
+    A Kedro node wrapper around
+    :func:`cybernaut_mini.corpus.validate_judgments_against_corpus`. Wires the
+    corpus pipeline's ``documents`` output to the judgment pipeline so validation
+    runs after both branches complete.
+    """
+    from cybernaut_mini.models import Judgment
+
+    corpus_ids = {d["id"] for d in documents}
+    parsed = [Judgment.model_validate(j) for j in judgments]
+    validate_judgments_against_corpus(parsed, corpus_ids)
+    return judgments
+
+
+def merge_documents(
+    ccnews_docs: list[dict[str, Any]],
+    miracl_docs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Combine normalised CC-News and MIRACL corpus documents into one list.
+
+    The two sources use disjoint id prefixes (``ccn-*`` for CC-News, ``mir-*``
+    for MIRACL) so id collisions should never occur in a correctly configured
+    pipeline. Defensive deduplication by id is applied regardless: the first
+    occurrence wins, and CC-News precedes MIRACL in argument order, so a
+    ccn- record beats a mir- record on an accidental collision.
+
+    Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — the fidelity
+        requirement that every qrels-positive MIRACL passage is present in the
+        corpus mandates a *separate* MIRACL corpus branch rather than a single
+        CC-News source, which would miss the MIRACL passages entirely. Local
+        copy: ``docs/blog-archive/the-road-to-cybernaut-1.md``.
+
+    Assumptions:
+        - ``ccnews_docs`` and ``miracl_docs`` have already been normalised by
+          :func:`normalize_corpus` with their respective ``CorpusSourceConfig``
+          values, so every record has an ``id`` field.
+        - The MIRACL branch is expected to be smaller (~8 k passages) and all of
+          its documents survive into the merged list before :func:`select_documents`
+          applies the language filter and ``max_documents`` cap. This guarantees
+          the fidelity rule: qrels-positive passages are never dropped by the cap.
+
+    Alternatives rejected:
+        - A single source with a unified ``field_map``: CC-News and MIRACL use
+          different column names (``plain_text`` vs ``text``, ``requested_url`` vs
+          ``docid``), so a shared config would need conditional logic — the
+          definition of what this class exists to avoid.
+        - Merging inside ``select_documents``: that node already has one
+          responsibility (filtering + capping); adding a join would hide a
+          structurally important step from ``kedro viz`` lineage.
+
+    Raises :exc:`ValueError` when both branches produce zero documents.
+    """
+    seen: set[str] = set()
+    merged: list[dict[str, Any]] = []
+    for doc in (*ccnews_docs, *miracl_docs):
+        doc_id = doc["id"]
+        if doc_id not in seen:
+            seen.add(doc_id)
+            merged.append(doc)
+    if not merged:
+        msg = (
+            "merge_documents: both ccnews and miracl branches produced zero "
+            "documents; check the source catalog entries and their field_maps"
+        )
+        raise ValueError(msg)
+    return merged
 
 
 def select_documents(

@@ -13,6 +13,7 @@ from cybernaut_mini.datasets import (
     CanonicalJsonDataset,
     HuggingFaceDataset,
     JsonlDataset,
+    MiraclTsvDataset,
     NpyDataset,
     ShardIndexDataset,
 )
@@ -396,3 +397,149 @@ def test_streaming_no_columns_no_max_returns_all(monkeypatch: pytest.MonkeyPatch
     ds = HuggingFaceDataset(repo_id="test/repo", revision=_PINNED_SHA, streaming=True)
     result = ds.load()
     assert result == rows
+
+
+# ------------------------------------------------------------------ #
+# MiraclTsvDataset — offline tests                                    #
+# ------------------------------------------------------------------ #
+
+_MIRACL_SHA = "5be20db9509754dadad47689368639fcec739c00"
+
+# Canonical path components built by MiraclTsvDataset for language="en", split="dev"
+_TOPICS_PATH = (
+    f"datasets/miracl/miracl@{_MIRACL_SHA}"
+    "/miracl-v1.0-en/topics/topics.miracl-v1.0-en-dev.tsv"
+)
+_QRELS_PATH = (
+    f"datasets/miracl/miracl@{_MIRACL_SHA}"
+    "/miracl-v1.0-en/qrels/qrels.miracl-v1.0-en-dev.tsv"
+)
+
+_SAMPLE_TOPICS = "0\tIs Creole a pidgin of French?\n20\tWhat percentage of oxygen?\n"
+# query 0 has one positive + one negative; query 20 has no qrels (should be dropped)
+_SAMPLE_QRELS = "0\tQ0\t462221#4\t1\n0\tQ0\t1170520#2\t0\n"
+
+
+class _FakeFile:
+    """Context-manager that iterates over pre-loaded lines."""
+
+    def __init__(self, content: str) -> None:
+        self._lines = content.splitlines(keepends=True)
+
+    def __enter__(self) -> Any:
+        return iter(self._lines)
+
+    def __exit__(self, *a: Any) -> None:
+        pass
+
+
+def _install_fake_hf_filesystem(
+    monkeypatch: pytest.MonkeyPatch,
+    files: dict[str, str],
+) -> None:
+    """Patch huggingface_hub so MiraclTsvDataset never hits the network."""
+
+    class _FakeFs:
+        def __init__(self, token: Any = None) -> None:
+            pass
+
+        def open(self, path: str, mode: str = "r", encoding: str = "utf-8") -> _FakeFile:
+            if path not in files:
+                raise FileNotFoundError(f"fake fs: {path!r} not found")
+            return _FakeFile(files[path])
+
+    fake_hf = types.ModuleType("huggingface_hub")
+    fake_hf.HfFileSystem = _FakeFs  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "huggingface_hub", fake_hf)
+
+
+def _default_files() -> dict[str, str]:
+    return {_TOPICS_PATH: _SAMPLE_TOPICS, _QRELS_PATH: _SAMPLE_QRELS}
+
+
+@pytest.mark.parametrize("revision", ["main", "master", "HEAD", ""])
+def test_miracl_tsv_revision_must_be_pinned(revision: str) -> None:
+    with pytest.raises(DatasetError, match="immutable"):
+        MiraclTsvDataset(repo_id="miracl/miracl", revision=revision, language="en")
+
+
+def test_miracl_tsv_placeholder_revision_is_rejected() -> None:
+    with pytest.raises(DatasetError, match="placeholder"):
+        MiraclTsvDataset(
+            repo_id="miracl/miracl", revision="REPLACE_WITH_COMMIT_SHA", language="en"
+        )
+
+
+def test_miracl_tsv_describe_contains_key_fields() -> None:
+    ds = MiraclTsvDataset(repo_id="miracl/miracl", revision=_MIRACL_SHA, language="en")
+    described = ds._describe()
+    assert described["repo_id"] == "miracl/miracl"
+    assert described["revision"] == _MIRACL_SHA
+    assert described["language"] == "en"
+    assert described["split"] == "dev"
+
+
+def test_miracl_tsv_exists_returns_false_without_network() -> None:
+    ds = MiraclTsvDataset(repo_id="miracl/miracl", revision=_MIRACL_SHA, language="en")
+    assert ds.exists() is False
+
+
+def test_miracl_tsv_is_read_only() -> None:
+    ds = MiraclTsvDataset(repo_id="miracl/miracl", revision=_MIRACL_SHA, language="en")
+    with pytest.raises(DatasetError, match="read-only"):
+        ds.save([])  # type: ignore[arg-type]
+
+
+def test_miracl_tsv_load_returns_structured_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_fake_hf_filesystem(monkeypatch, _default_files())
+    ds = MiraclTsvDataset(repo_id="miracl/miracl", revision=_MIRACL_SHA, language="en")
+    rows = ds.load()
+    # query 20 has no qrels → dropped; only query 0 survives
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["query_id"] == "0"
+    assert row["query"] == "Is Creole a pidgin of French?"
+    assert "positive_passages" in row
+    assert "negative_passages" in row
+
+
+def test_miracl_tsv_positive_passages_have_grade_1_docids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hf_filesystem(monkeypatch, _default_files())
+    ds = MiraclTsvDataset(repo_id="miracl/miracl", revision=_MIRACL_SHA, language="en")
+    rows = ds.load()
+    pos = rows[0]["positive_passages"]
+    assert len(pos) == 1
+    assert pos[0]["docid"] == "462221#4"
+
+
+def test_miracl_tsv_negative_passages_have_grade_0_docids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_hf_filesystem(monkeypatch, _default_files())
+    ds = MiraclTsvDataset(repo_id="miracl/miracl", revision=_MIRACL_SHA, language="en")
+    rows = ds.load()
+    neg = rows[0]["negative_passages"]
+    assert len(neg) == 1
+    assert neg[0]["docid"] == "1170520#2"
+
+
+def test_miracl_tsv_drops_topics_with_no_qrels(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Topics that appear in the topics file but have zero qrel rows are silently dropped."""
+    topics = "99\tOrphan question with no assessments.\n"
+    qrels = ""  # no rows at all
+    _install_fake_hf_filesystem(monkeypatch, {_TOPICS_PATH: topics, _QRELS_PATH: qrels})
+    ds = MiraclTsvDataset(repo_id="miracl/miracl", revision=_MIRACL_SHA, language="en")
+    assert ds.load() == []
+
+
+def test_miracl_tsv_multiple_positives_collected(monkeypatch: pytest.MonkeyPatch) -> None:
+    topics = "5\tMulti-positive query.\n"
+    qrels = "5\tQ0\tdoc1#0\t1\n5\tQ0\tdoc2#0\t1\n5\tQ0\tdoc3#0\t0\n"
+    _install_fake_hf_filesystem(monkeypatch, {_TOPICS_PATH: topics, _QRELS_PATH: qrels})
+    ds = MiraclTsvDataset(repo_id="miracl/miracl", revision=_MIRACL_SHA, language="en")
+    rows = ds.load()
+    assert len(rows) == 1
+    assert len(rows[0]["positive_passages"]) == 2
+    assert len(rows[0]["negative_passages"]) == 1

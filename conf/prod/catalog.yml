@@ -40,3 +40,32 @@ documents:
 shard_index:
   type: cybernaut_mini.datasets.ShardIndexDataset
   filepath: ${runtime_params:index_path,artifacts/prediction}
+
+# ------------------------------------------------------------------ #
+# MIRACL en-dev judgment pipeline (task #5 / M1.4)                   #
+# ------------------------------------------------------------------ #
+# Run standalone: kedro run --env prod --pipeline judgment_ingest
+# Or as part of production (documents must exist first for validation).
+
+miracl_en_dev_source:
+  # load_dataset("miracl/miracl") is blocked by a deprecated loading script
+  # (miracl.py). MiraclTsvDataset reads the underlying TSV files directly via
+  # HfFileSystem and assembles them into the same structured row format.
+  type: cybernaut_mini.datasets.MiraclTsvDataset
+  repo_id: miracl/miracl
+  # SHA pinned 2026-08-14 from:
+  #   uv run python -c "from huggingface_hub import HfApi; \
+  #     print(HfApi().dataset_info('miracl/miracl').sha)"
+  revision: 5be20db9509754dadad47689368639fcec739c00
+  language: en
+  split: dev
+
+# Intermediate: unvalidated judgments before the corpus cross-check.
+miracl_judgments_unvalidated:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/02_intermediate/miracl_en_dev_judgments_unvalidated.jsonl
+
+# Final validated judgments consumed by the evaluation pipeline.
+judgments:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/03_primary/miracl_en_dev_judgments.jsonl
