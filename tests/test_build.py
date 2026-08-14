@@ -438,3 +438,454 @@ def test_build_json_flag(tmp_path: Path) -> None:
     assert parsed["n_documents"] == 12
     assert parsed["n_shards"] == 3
     assert "index" in parsed
+
+
+# ------------------------------------------------------------------ #
+# Shard file naming (the fixed-3-digit bug)                           #
+# ------------------------------------------------------------------ #
+
+
+def test_shard_id_width_keeps_three_digits_below_a_thousand_shards() -> None:
+    from cybernaut_mini.indexing import shard_filename, shard_id_width
+
+    assert shard_id_width(1) == 3
+    assert shard_id_width(4) == 3
+    assert shard_id_width(1000) == 3  # ids 0..999 still fit in three digits
+    assert shard_filename(3, 4) == "shard_003.json"
+    assert shard_filename(999, 1000) == "shard_999.json"
+
+
+def test_shard_id_width_grows_past_a_thousand_shards() -> None:
+    """The old fixed ``:03d`` produced names that no longer sort in shard order."""
+    from cybernaut_mini.indexing import shard_filename, shard_id_width
+
+    assert shard_id_width(1001) == 4
+    assert shard_id_width(10_000) == 4
+    assert shard_id_width(10_001) == 5
+
+    n_shards = 1001
+    names = [shard_filename(sid, n_shards) for sid in range(n_shards)]
+    assert names[0] == "shard_0000.json"
+    assert names[1000] == "shard_1000.json"
+    # Lexicographic order and shard order agree — the property the old naming lost.
+    assert sorted(names) == names
+
+    # Demonstrate the defect being fixed: with the old fixed width they do not.
+    old_style = [f"shard_{sid:03d}.json" for sid in range(n_shards)]
+    assert sorted(old_style) != old_style
+
+
+def test_shard_filename_rejects_out_of_range_ids() -> None:
+    from cybernaut_mini.indexing import shard_filename
+
+    with pytest.raises(ValueError, match="out of range"):
+        shard_filename(4, 4)
+
+
+# ------------------------------------------------------------------ #
+# Direct write_index round-trips at 1000+ shards                      #
+# ------------------------------------------------------------------ #
+
+
+def _write_one_doc_per_shard_index(
+    index_path: Path, n_shards: int, *, build_artifacts: bool = True
+) -> None:
+    """Write an index of ``n_shards`` single-document shards without running k-means.
+
+    Sharding quality is irrelevant here; what is under test is that shard ids
+    survive the file-name round-trip at a scale where three digits are not enough.
+    """
+    from cybernaut_mini.indexing import write_index
+    from cybernaut_mini.models import Document, IndexMeta, ShardManifest
+
+    documents = [
+        Document(id=f"doc-{i:05d}", title=f"title {i}", text=f"body text for document {i}")
+        for i in range(n_shards)
+    ]
+    doc_tokens = {doc.id: [f"tok{i}", "shared", f"body{i}"] for i, doc in enumerate(documents)}
+    vectors = np.zeros((n_shards, 4), dtype=np.float32)
+    vectors[:, 0] = 1.0
+    manifests = [
+        ShardManifest(
+            shard_id=i,
+            document_ids=[documents[i].id],
+            centroid=[1.0, 0.0, 0.0, 0.0],
+            title=f"shard {i}",
+            summary=documents[i].title,
+            keywords=[],
+            entities=[],
+            term_graph={},
+            document_count=1,
+            embedding_model="hash-4",
+        )
+        for i in range(n_shards)
+    ]
+    meta = IndexMeta(
+        embedding_model="hash-4",
+        embedding_dim=4,
+        n_shards=n_shards,
+        n_documents=n_shards,
+        seed=42,
+    )
+    write_index(
+        index_path,
+        meta=meta,
+        documents=documents,
+        vectors=vectors,
+        manifests=manifests,
+        doc_tokens=doc_tokens,
+        build_artifacts=build_artifacts,
+    )
+
+
+def test_shard_ids_round_trip_at_1030_shards(tmp_path: Path) -> None:
+    """1030 > 1000, so shard ids need four digits and every one must come back."""
+    index_dir = tmp_path / "wide"
+    _write_one_doc_per_shard_index(index_dir, 1030)
+
+    loaded = LoadedIndex.load(index_dir)
+    assert sorted(loaded.manifests) == list(range(1030))
+    for shard_id in (0, 1, 999, 1000, 1029):
+        assert loaded.manifests[shard_id].shard_id == shard_id
+        assert loaded.manifests[shard_id].document_ids == [f"doc-{shard_id:05d}"]
+
+    names = sorted(p.name for p in (index_dir / "shards").glob("shard_*.json"))
+    assert len(names) == 1030
+    assert names[0] == "shard_0000.json"
+    assert names[-1] == "shard_1029.json"
+    # Sorted file order is shard order, which is what the fixed width buys.
+    assert [int(name[len("shard_") : -len(".json")]) for name in names] == list(range(1030))
+
+
+def test_load_ignores_stray_files_and_directory_order(tmp_path: Path) -> None:
+    """Loading is driven by meta.n_shards, never by what the directory happens to hold."""
+    index_dir = tmp_path / "stray"
+    _write_one_doc_per_shard_index(index_dir, 1030, build_artifacts=False)
+
+    (index_dir / "shards" / "shard_9999.json").write_text("{ not json", encoding="utf-8")
+    (index_dir / "shards" / "README.txt").write_text("hello", encoding="utf-8")
+
+    loaded = LoadedIndex.load(index_dir)
+    assert sorted(loaded.manifests) == list(range(1030))
+
+
+def test_write_index_rejects_a_manifest_set_that_cannot_be_loaded(tmp_path: Path) -> None:
+    from cybernaut_mini.indexing import write_index
+    from cybernaut_mini.models import Document, IndexMeta, ShardManifest
+
+    documents = [
+        Document(id="doc-a", title="t", text="b"),
+        Document(id="doc-b", title="t", text="b"),
+    ]
+    manifests = [
+        ShardManifest(
+            shard_id=5,  # not in range(2)
+            document_ids=["doc-a", "doc-b"],
+            centroid=[1.0],
+            title="t",
+            summary="s",
+            keywords=[],
+            entities=[],
+            term_graph={},
+            document_count=2,
+            embedding_model="hash-1",
+        )
+    ]
+    meta = IndexMeta(
+        embedding_model="hash-1", embedding_dim=1, n_shards=1, n_documents=2, seed=0
+    )
+    with pytest.raises(ValueError, match="shard ids must be exactly"):
+        write_index(
+            tmp_path / "bad",
+            meta=meta,
+            documents=documents,
+            vectors=np.ones((2, 1), dtype=np.float32),
+            manifests=manifests,
+            doc_tokens={"doc-a": ["a"], "doc-b": ["b"]},
+        )
+
+
+# ------------------------------------------------------------------ #
+# Artifact version rejection                                          #
+# ------------------------------------------------------------------ #
+
+
+def test_load_rejects_an_older_valid_marker(tmp_path: Path) -> None:
+    index_dir = _build_index(tmp_path)
+    (index_dir / "_VALID").write_text("1", encoding="utf-8")
+
+    with pytest.raises(IndexLoadError) as excinfo:
+        LoadedIndex.load(index_dir)
+    message = str(excinfo.value)
+    assert "'1'" in message and "'2'" in message
+    assert "cybernaut-mini build" in message, "the error must say how to fix it"
+
+
+def test_load_rejects_an_older_artifact_version_in_meta(tmp_path: Path) -> None:
+    """A _VALID marker alone is not proof; index_meta.json is checked too."""
+    index_dir = _build_index(tmp_path)
+    meta_file = index_dir / "index_meta.json"
+    meta = json.loads(meta_file.read_text(encoding="utf-8"))
+    meta["artifact_version"] = "1"
+    meta_file.write_text(json.dumps(meta, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(IndexLoadError, match="cybernaut-mini build"):
+        LoadedIndex.load(index_dir)
+
+
+def test_missing_valid_marker_still_names_valid(tmp_path: Path) -> None:
+    index_dir = _build_index(tmp_path)
+    (index_dir / "_VALID").unlink()
+    with pytest.raises(IndexLoadError, match="_VALID"):
+        LoadedIndex.load(index_dir)
+
+
+# ------------------------------------------------------------------ #
+# Shard artifacts on disk                                             #
+# ------------------------------------------------------------------ #
+
+
+def test_build_writes_a_shard_artifact_sidecar_per_shard(tmp_path: Path) -> None:
+    index_dir = _build_index(tmp_path, n_docs=40, n_shards=4)
+    sidecars = sorted((index_dir / "shards" / "artifacts").glob("shard_*.json"))
+    assert len(sidecars) == 4
+
+    loaded = LoadedIndex.load(index_dir)
+    for shard_id in range(4):
+        artifacts = loaded.shard_artifacts(shard_id)
+        assert artifacts is not None
+        # Every keyword the manifest advertises must be in the shard's own filter.
+        for keyword in loaded.manifests[shard_id].keywords[:5]:
+            assert keyword.term in artifacts.phrase_bloom
+            assert keyword.term in artifacts.vocabulary
+
+
+def test_manifests_do_not_carry_artifact_payloads_but_can_be_asked_for_them(
+    tmp_path: Path,
+) -> None:
+    """The resident manifest stays small; the full record is one call away."""
+    index_dir = _build_index(tmp_path, n_docs=40, n_shards=4)
+    loaded = LoadedIndex.load(index_dir)
+
+    assert loaded.manifests[0].vocabulary is None
+    assert loaded.manifests[0].phrase_bloom is None
+
+    full = loaded.manifest_with_artifacts(0)
+    assert full.phrase_bloom is not None
+    assert full.vocabulary is not None
+    assert full.document_ids == loaded.manifests[0].document_ids
+
+
+def test_shard_artifacts_are_read_once_and_then_cached(tmp_path: Path) -> None:
+    index_dir = _build_index(tmp_path, n_docs=40, n_shards=4)
+    loaded = LoadedIndex.load(index_dir)
+
+    loaded.shard_artifacts(1)
+    loaded.shard_artifacts(1)
+    loaded.shard_artifacts(2)
+    stats = loaded.artifacts.stats()
+    assert stats["misses"] == 2, "one disk read per distinct shard"
+    assert stats["hits"] == 1
+
+
+def test_index_without_artifacts_loads_and_reports_none(tmp_path: Path) -> None:
+    index_dir = tmp_path / "bare"
+    _write_one_doc_per_shard_index(index_dir, 4, build_artifacts=False)
+    loaded = LoadedIndex.load(index_dir)
+    assert loaded.shard_artifacts(0) is None
+    assert loaded.manifest_with_artifacts(0).phrase_bloom is None
+
+
+# ------------------------------------------------------------------ #
+# Laziness of the loaded index                                        #
+# ------------------------------------------------------------------ #
+
+
+def test_loaded_documents_are_a_lazy_sequence_not_a_list(tmp_path: Path) -> None:
+    from cybernaut_mini.indexing import StoredDocuments
+
+    index_dir = _build_index(tmp_path, n_docs=12, n_shards=3)
+    loaded = LoadedIndex.load(index_dir)
+
+    assert isinstance(loaded.documents, StoredDocuments)
+    assert not isinstance(loaded.documents, list)
+    assert len(loaded.documents) == 12
+    assert [doc.id for doc in loaded.documents] == [f"doc-{i:03d}" for i in range(1, 13)]
+    assert loaded.documents[0].id == "doc-001"
+    assert loaded.documents[-1].id == "doc-012"
+    assert [doc.id for doc in loaded.documents[2:4]] == ["doc-003", "doc-004"]
+    with pytest.raises(IndexError):
+        loaded.documents[12]
+
+
+def test_by_id_and_row_map_agree_with_the_written_row_map(tmp_path: Path) -> None:
+    """row_map.json stays on disk; the lazy view must return exactly what it says."""
+    index_dir = _build_index(tmp_path, n_docs=12, n_shards=3)
+    written = json.loads((index_dir / "row_map.json").read_text(encoding="utf-8"))
+    loaded = LoadedIndex.load(index_dir)
+
+    assert dict(loaded.row_map) == written
+    for doc_id, row in written.items():
+        assert loaded.row_map[doc_id] == row
+        assert loaded.by_id[doc_id].id == doc_id
+    assert "doc-999" not in loaded.by_id
+    with pytest.raises(KeyError):
+        loaded.by_id["doc-999"]
+
+
+def test_doc_tokens_behaves_like_the_old_dict(tmp_path: Path) -> None:
+    index_dir = _build_index(tmp_path, n_docs=12, n_shards=3)
+    loaded = LoadedIndex.load(index_dir)
+
+    tokens = loaded.doc_tokens["doc-001"]
+    assert isinstance(tokens, list)
+    assert tokens and all(isinstance(token, str) for token in tokens)
+    assert loaded.doc_tokens.get("doc-999", []) == []
+    assert len(loaded.doc_tokens) == 12
+    assert sorted(loaded.doc_tokens) == sorted(f"doc-{i:03d}" for i in range(1, 13))
+
+
+def test_bm25_is_built_per_shard_on_first_access(tmp_path: Path) -> None:
+    index_dir = _build_index(tmp_path, n_docs=12, n_shards=3)
+    loaded = LoadedIndex.load(index_dir)
+
+    assert loaded.bm25.stats()["misses"] == 0, "load must not build any BM25 index"
+    assert loaded.bm25.built_shard_ids() == []
+
+    first = loaded.bm25[1]
+    assert loaded.bm25.built_shard_ids() == [1]
+    assert loaded.bm25[1] is first, "second access must reuse the built object"
+    assert loaded.bm25.stats() == {
+        "hits": 1,
+        "misses": 1,
+        "evictions": 0,
+        "size": 1,
+        "maxsize": 32,
+    }
+    with pytest.raises(KeyError):
+        loaded.bm25[99]
+
+
+def test_bm25_cache_evicts_beyond_its_bound(tmp_path: Path) -> None:
+    index_dir = _build_index(tmp_path, n_docs=12, n_shards=3)
+    loaded = LoadedIndex.load(index_dir, bm25_cache_size=2)
+
+    for shard_id in (0, 1, 2):
+        loaded.bm25[shard_id]
+    assert loaded.bm25.stats()["evictions"] == 1
+    assert loaded.bm25.built_shard_ids() == [1, 2]
+
+
+def test_bm25_scores_match_a_directly_built_index(tmp_path: Path) -> None:
+    """Laziness must not change a single score."""
+    from rank_bm25 import BM25Okapi
+
+    index_dir = _build_index(tmp_path, n_docs=12, n_shards=3)
+    loaded = LoadedIndex.load(index_dir)
+
+    for shard_id, manifest in loaded.manifests.items():
+        corpus = [loaded.doc_tokens.get(doc_id, []) for doc_id in manifest.document_ids]
+        expected = BM25Okapi(corpus).get_scores(["biotech", "headline"])
+        actual = loaded.bm25[shard_id].get_scores(["biotech", "headline"])
+        assert np.allclose(actual, expected), f"shard {shard_id} scores drifted"
+
+
+def test_vectors_are_memory_mapped(tmp_path: Path) -> None:
+    index_dir = _build_index(tmp_path, n_docs=12, n_shards=3)
+    loaded = LoadedIndex.load(index_dir)
+
+    assert isinstance(loaded.vectors, np.memmap)
+    assert loaded.vectors.shape == (12, 64)
+    assert loaded.vectors.dtype == np.float32
+    # Still a real array for the callers that treat it as one.
+    assert len(loaded.vectors.tolist()) == 12
+
+
+def test_loaded_index_can_be_constructed_from_plain_objects(tmp_path: Path) -> None:
+    """The in-memory constructor still works, so small fixtures need no index on disk."""
+    from cybernaut_mini.indexing import LoadedIndex as LI
+    from cybernaut_mini.models import Document, IndexMeta, ShardManifest
+
+    docs = [
+        Document(id="d1", title="t1", text="alpha beta"),
+        Document(id="d2", title="t2", text="beta gamma"),
+    ]
+    manifest = ShardManifest(
+        shard_id=0,
+        document_ids=["d1", "d2"],
+        centroid=[1.0, 0.0],
+        title="t",
+        summary="s",
+        keywords=[],
+        entities=[],
+        term_graph={},
+        document_count=2,
+        embedding_model="hash-2",
+    )
+    index = LI(
+        meta=IndexMeta(
+            embedding_model="hash-2", embedding_dim=2, n_shards=1, n_documents=2, seed=0
+        ),
+        documents=docs,
+        vectors=np.eye(2, dtype=np.float32),
+        row_map={"d1": 0, "d2": 1},
+        manifests={0: manifest},
+        doc_tokens={"d1": ["alpha", "beta"], "d2": ["beta", "gamma"]},
+    )
+    assert index.by_id["d1"].title == "t1"
+    assert len(index.bm25[0].get_scores(["alpha"])) == 2
+    assert index.shard_artifacts(0) is None
+
+
+def test_write_index_names_a_shard_that_references_an_unwritten_document(tmp_path: Path) -> None:
+    from cybernaut_mini.indexing import write_index
+    from cybernaut_mini.models import Document, IndexMeta, ShardManifest
+
+    manifest = ShardManifest(
+        shard_id=0,
+        document_ids=["doc-a", "doc-ghost"],
+        centroid=[1.0],
+        title="t",
+        summary="s",
+        keywords=[],
+        entities=[],
+        term_graph={},
+        document_count=2,
+        embedding_model="hash-1",
+    )
+    with pytest.raises(ValueError, match="shard 0 references document ids"):
+        write_index(
+            tmp_path / "ghost",
+            meta=IndexMeta(
+                embedding_model="hash-1", embedding_dim=1, n_shards=1, n_documents=1, seed=0
+            ),
+            documents=[Document(id="doc-a", title="t", text="b")],
+            vectors=np.ones((1, 1), dtype=np.float32),
+            manifests=[manifest],
+            doc_tokens={"doc-a": ["a"]},
+        )
+    assert not (tmp_path / "ghost" / "_VALID").exists()
+
+
+def test_cache_stats_reports_every_bounded_cache(tmp_path: Path) -> None:
+    index_dir = _build_index(tmp_path, n_docs=12, n_shards=3)
+    loaded = LoadedIndex.load(index_dir)
+    loaded.by_id["doc-001"]
+    loaded.doc_tokens["doc-001"]
+    loaded.bm25[0]
+    loaded.shard_artifacts(0)
+
+    stats = loaded.cache_stats()
+    assert set(stats) == {"bm25", "artifacts", "documents", "tokens"}
+    assert all(entry["misses"] == 1 for entry in stats.values())
+
+
+def test_close_releases_the_stores_and_is_idempotent(tmp_path: Path) -> None:
+    index_dir = _build_index(tmp_path, n_docs=12, n_shards=3)
+    loaded = LoadedIndex.load(index_dir)
+    assert loaded.by_id["doc-001"].id == "doc-001"
+
+    loaded.close()
+    loaded.close()  # idempotent
+    with pytest.raises(ValueError, match="closed"):
+        loaded.by_id["doc-002"]

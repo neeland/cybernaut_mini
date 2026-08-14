@@ -2,6 +2,33 @@
 
 Every artifact on disk is produced through :func:`canonical_dumps` so that two
 builds with the same seed and provider are byte-for-byte identical.
+
+Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — the post lists what a
+    shard actually holds: "Bloom Filters: used to quickly check if phrases exist",
+    "Each shard has a trained Zstandard text compression dictionary", and
+    "Vocabulary: the set of unique words in this shard" (shard 11,343 is quoted at a
+    vocabulary of 64,992 terms). :class:`ShardManifest` had none of those three, so
+    they are added here as first-class manifest fields. Local copy:
+    ``docs/blog-archive/the-road-to-cybernaut-1.md``
+
+Assumptions: the post does not say how the three artifacts are serialised, so the
+    two binary ones travel base64 inside JSON — the bloom bit array as the payload
+    produced by :meth:`cybernaut_mini.shard_artifacts.PhraseBloom.to_payload`, the
+    zstd dictionary as a bare base64 string. All three fields default to ``None``
+    because a shard too small to train a dictionary on is legitimate (the tail of a
+    k-means split) and because a manifest held in memory usually does *not* carry
+    them: :class:`~cybernaut_mini.indexing.LoadedIndex` deliberately leaves them
+    unpopulated and fetches them per shard on demand, since 1,000 resident
+    vocabularies of 65,536 terms is gigabytes of heap.
+
+Alternatives rejected: a single ``artifacts`` sub-model holding all three. Rejected
+    because the three have genuinely different lifetimes — the bloom is ~1.2 KB and
+    cheap to keep, the vocabulary is the one that cannot be held 1,000 times over —
+    and one field would force an all-or-nothing load. Also rejected: validating
+    ``artifact_version`` inside the models. A model that refuses to parse an old
+    record cannot produce the error message that tells the user which version they
+    have; that check belongs at the index boundary, in
+    :meth:`~cybernaut_mini.indexing.LoadedIndex.load`.
 """
 
 from __future__ import annotations
@@ -13,7 +40,12 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-ARTIFACT_VERSION = "1"
+#: Bumped to "2" when shards gained their bloom filter, zstd dictionary and
+#: vocabulary, and the index layout gained per-shard artifact sidecars and
+#: JSONL offset sidecars. A "1" index has none of those files, so it is rejected
+#: at load rather than read as a shard set with three permanently-absent
+#: artifacts — see :meth:`cybernaut_mini.indexing.LoadedIndex.load`.
+ARTIFACT_VERSION = "2"
 
 FLOAT_DECIMALS = 8
 
@@ -128,6 +160,36 @@ class ShardManifest(BaseModel):
     document_count: int
     artifact_version: str = ARTIFACT_VERSION
     embedding_model: str
+
+    #: Bloom filter over this shard's important phrases, as produced by
+    #: :meth:`cybernaut_mini.shard_artifacts.PhraseBloom.to_payload` (the bit array
+    #: is base64 inside it). ``None`` means "not loaded / not built", never "empty":
+    #: an empty shard still gets a real, always-false filter.
+    phrase_bloom: dict[str, Any] | None = None
+    #: Base64 of this shard's trained Zstandard dictionary. ``None`` when zstd
+    #: refused to train — a shard of a handful of short documents does not contain
+    #: enough repeated material — in which case
+    #: :func:`cybernaut_mini.shard_artifacts.compression_score` scores it 0.0.
+    zstd_dictionary: str | None = None
+    #: This shard's unique terms, as produced by
+    #: :meth:`cybernaut_mini.shard_artifacts.Vocabulary.to_payload`. The single
+    #: largest field a manifest can carry, which is why it is loaded per shard on
+    #: demand rather than with the manifest.
+    vocabulary: dict[str, Any] | None = None
+
+    def without_artifacts(self) -> ShardManifest:
+        """A copy with the three artifact fields cleared.
+
+        This is the form the manifest takes on disk and in memory: the payloads live
+        in a per-shard sidecar so that loading 1,000 manifests stays cheap.
+        """
+        return self.model_copy(
+            update={"phrase_bloom": None, "zstd_dictionary": None, "vocabulary": None}
+        )
+
+    def has_artifacts(self) -> bool:
+        """True when all three artifact fields are populated on this instance."""
+        return self.phrase_bloom is not None and self.vocabulary is not None
 
     @field_validator("document_ids")
     @classmethod

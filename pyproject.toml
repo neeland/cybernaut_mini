@@ -14,15 +14,53 @@ dependencies = [
     "kedro>=0.19.8",
     "pyyaml>=6.0",
     "model2vec>=0.3",
+    # --- Blog stage 1: language detection (the post names fasttext-langdetect) ---
+    "fasttext-langdetect>=1.0.5",
+    # --- Blog stage 2: multilingual tokenization ---
+    "pystemmer>=2.2",          # Snowball, 24 languages — the post's stemmer
+    "pysbd>=0.3.4",            # sentence boundary detection, 22 languages
+    "jieba>=0.42",             # Chinese segmentation
+    # Japanese morphological analysis. Core, not optional: without it the tokenizer
+    # falls back to character bigrams, which shreds the blog's own headline Japanese
+    # token 遺伝子 into 遺伝/伝子/子編 and emits six non-word bigrams. Ships as a
+    # wheel with a bundled dictionary, so it costs an install, not a build.
+    "mecab-python3>=1.0",
+    "ipadic>=1.0",
+    # --- Blog stage 6: shard rerankers ---
+    "rbloom>=1.5",             # phrase bloom filters (the post names rBloom)
+    "zstandard>=0.22",         # trained compression dictionaries
+    "networkx>=3.0",           # Personalized PageRank over the shard kNN graph
+    # --- Blog stage 5 / 8: vector index and full-text intent matching ---
+    "usearch>=2.12",           # HNSW shard selection
+    "ahocorasick-rs>=0.22",    # full-text intent pass (the post names ahocorasick-rs)
+    # --- Cybernaut-1: LLM-guided search. OpenAI-compatible, so one client
+    # covers OpenAI, OpenRouter (the post's own translation provider), and
+    # any local server exposing /v1. No key is needed to import it.
+    "openai>=1.40",
 ]
 
 [project.optional-dependencies]
 st = ["sentence-transformers>=3.0"]
+# Apple silicon: the macOS arm64 torch wheel carries the MPS backend, so the
+# 'sentence_transformers' provider runs on the GPU with embedding.device=auto.
+# Pulled in as its own extra rather than added to `st` because the wheel is large
+# and the marker means a Linux install silently gets nothing from it.
+#
+# On aarch64 Linux, plain `torch` resolves to a '+cu' build: ~427 MB of CUDA
+# kernels for a machine where torch.cuda.is_available() is False and MPS is not
+# built. `uv sync --extra st --extra mps` on a Mac is the intended path; a Linux
+# box wanting torch should install the CPU wheel from the pytorch CPU index.
+mps = ["torch>=2.4; platform_system == 'Darwin' and platform_machine == 'arm64'"]
 nlp = ["spacy>=3.7"]
 viz = ["kedro-viz>=9.0"]
 # Corpus acquisition from the Hugging Face Hub. Optional so the core package
 # stays network-free: without it, only local corpora (data/01_raw/*.jsonl) load.
 hf = ["datasets>=3.0", "huggingface-hub>=0.25"]
+# Retained as a no-op alias so `--extra cjk` keeps working; MeCab is now core
+# because blog stage 2's Japanese worked example cannot be met without it.
+cjk = []
+# Anthropic-native client, for users who prefer it over the OpenAI-compatible path.
+anthropic = ["anthropic>=0.34"]
 
 [project.scripts]
 cybernaut-mini = "cybernaut_mini.cli:app"

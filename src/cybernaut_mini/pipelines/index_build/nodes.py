@@ -1,5 +1,13 @@
 """Pure-function Kedro nodes for the index_build pipeline.
 
+Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — stage 7 says the synonym
+    graph belongs to the shard, not the corpus [disclosed]: "we use the synonym graphs
+    in each shard to probabilistically expand our search terms. Because each shard is
+    lexically and semantically coherent, the synonyms in each shard are unambiguous.
+    Put simply, 'gene' in shard 11,343 only has the genetic meaning. We don't need to
+    worry that Gene is also a name and, in some other shards, would co-occur a lot
+    with 'Willy Wonka'." Local copy: docs/blog-archive/the-road-to-cybernaut-1.md
+
 Each function accepts and returns plain Python objects (dicts, lists, str) so
 Kedro can pass them through its in-memory dataset layer without custom pickling.
 Heavy objects (numpy arrays, pydantic models) are converted at node boundaries.
@@ -7,6 +15,20 @@ Heavy objects (numpy arrays, pydantic models) are converted at node boundaries.
 No node performs file I/O: the corpus arrives from the catalog's ``documents``
 dataset and the finished index leaves as a payload dict that
 :class:`~cybernaut_mini.datasets.ShardIndexDataset` writes.
+
+Assumptions: this node does not compute the term graph itself. It delegates to
+    :func:`cybernaut_mini.indexing.compute_shard_term_graphs`, which is also what any
+    direct :func:`~cybernaut_mini.indexing.write_index` caller uses, so the CLI build
+    and this pipeline cannot drift on the one decision that makes stage 7 work. The
+    per-shard graph cap (terms and neighbours) is the library's, not this node's —
+    :class:`~cybernaut_mini.config.IndexConfig` exposes ``cooccurrence_window`` and
+    ``min_edge_count`` but no cap, so the documented defaults apply [inferred].
+
+Alternatives rejected: computing one graph over the whole corpus and assigning it to
+    every manifest, which is what this node used to do. Measured on a 2,000-document /
+    32-shard build at production parameters: 4,072 KB of manifest per shard and
+    301.1 MB of retained heap at load, against 80.1 KB and 8.1 MB once the graph is
+    per shard and capped — and it hands shard 11,343 the Willy Wonka sense of "gene".
 """
 
 from __future__ import annotations
@@ -21,7 +43,7 @@ from cybernaut_mini.indexing import (
     _shard_title,
     compute_entities,
     compute_keywords,
-    compute_term_graph,
+    compute_shard_term_graphs,
 )
 from cybernaut_mini.ingest import validate_records
 from cybernaut_mini.models import (
@@ -150,12 +172,21 @@ def build_manifests(
     # Compute keywords.
     keywords_by_shard = compute_keywords(shard_tokens, index_config.max_keywords)
 
-    # Compute term graph (over all docs).
-    all_doc_tokens_list = [all_tokens.get(doc.id, []) for doc in docs]
-    global_term_graph = compute_term_graph(
-        all_doc_tokens_list,
+    # Term graphs, one per shard, from that shard's documents only. A single graph
+    # over the whole corpus — which this node used to compute and assign to every
+    # manifest — is what stage 7 explicitly does not want ("'gene' in shard 11,343
+    # only has the genetic meaning"), and it makes each manifest O(corpus). The
+    # shard's TF-IDF keywords are pinned so the term cap cannot evict the terms that
+    # made this shard distinctive.
+    term_graph_by_shard = compute_shard_term_graphs(
+        shard_doc_ids,
+        all_tokens,
         window=index_config.cooccurrence_window,
         min_edge_count=index_config.min_edge_count,
+        priority_terms={
+            shard_id: [kw.term for kw in keywords]
+            for shard_id, keywords in keywords_by_shard.items()
+        },
     )
 
     embedding_model = embedding_config.identifier()
@@ -183,7 +214,7 @@ def build_manifests(
             summary=summary,
             keywords=keywords,
             entities=entities,
-            term_graph=global_term_graph,
+            term_graph=term_graph_by_shard[shard_id],
             document_count=len(doc_ids),
             embedding_model=embedding_model,
         )

@@ -68,6 +68,18 @@ class EmbeddingConfig(BaseModel):
             "report their own dimension from the loaded weights."
         ),
     )
+    device: Literal["auto", "mps", "cuda", "cpu"] = Field(
+        default="auto",
+        description=(
+            "Torch device for the 'sentence_transformers' provider; ignored by "
+            "'hash' and 'model2vec', which never import torch. 'auto' prefers MPS "
+            "on Apple silicon, then CUDA, then CPU. An unavailable explicit choice "
+            "degrades to CPU rather than raising, so a config that travels between "
+            "a Mac and a Linux box still builds on both. Note that MPS and CPU do "
+            "not produce bit-identical vectors: byte-identical rebuilds are "
+            "guaranteed per-device, not across devices."
+        ),
+    )
 
     @property
     def model_name(self) -> str:

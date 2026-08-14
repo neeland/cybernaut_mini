@@ -174,7 +174,9 @@ class SentenceTransformersEmbedder:
     so a private or gated model works without a separate login step.
     """
 
-    def __init__(self, model_name: str, revision: str | None = None) -> None:
+    def __init__(
+        self, model_name: str, revision: str | None = None, device: str = "auto"
+    ) -> None:
         try:
             from sentence_transformers import SentenceTransformer
         except ImportError as exc:
@@ -188,14 +190,26 @@ class SentenceTransformersEmbedder:
                 "needs no download and keeps builds byte-for-byte reproducible."
             )
             raise ConfigError(msg) from exc
+        from cybernaut_mini.accel import resolve_device
+
         self._model_name = model_name
         self._revision = revision
+        # Resolved here rather than left to sentence-transformers' own detection so
+        # the choice is inspectable (``self.device``) and so an unavailable request
+        # degrades to CPU instead of raising mid-build.
+        self._device = resolve_device(device)  # type: ignore[arg-type]
         self._model = SentenceTransformer(
             model_name,
             revision=revision,
             token=os.environ.get("HF_TOKEN") or None,
+            device=self._device,
         )
         self._is_e5 = "e5" in model_name.lower()
+
+    @property
+    def device(self) -> str:
+        """The torch device this embedder actually resolved to."""
+        return self._device
 
     @property
     def identifier(self) -> str:

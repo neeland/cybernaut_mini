@@ -1,29 +1,134 @@
-"""Shard routing: score every shard, fuse with RRF, optionally rerank.
+"""Shard routing: blog stage 5 (selection) then blog stage 6 (reranking), in one call.
 
-``route()`` returns shard ids ordered best-first plus a ``RoutingSignals`` dataclass
-that carries all intermediate scores for inspection and tracing.
+``route()`` is the repo's long-standing entry point for "which shards should this
+question be searched in". It no longer *implements* either stage: stage 5 is
+:mod:`cybernaut_mini.query.s5_select` and stage 6 is
+:mod:`cybernaut_mini.query.s6_rerank`, and this module is the adapter that composes
+them and flattens their two result objects into the :class:`RoutingSignals` record the
+agent, the trace and the CLI already consume.
+
+What was deleted here, and why
+------------------------------
+The previous implementation did all of it inline and got two things wrong that the
+stage packages get right:
+
+* it scored **every** shard on dense and sparse similarity by scanning the manifest
+  dict, which is exactly the O(n_shards) query path the post's stage 5 exists to
+  avoid ("if we route the question to the wrong shards, we won't return the best
+  document" — but also, at a million shards you cannot look at all of them). Stage 5
+  answers the dense factor from a USearch HNSW graph and the sparse factor from a CSC
+  traversal that never visits a shard sharing no query term.
+* it approximated the post's compression reranker with ``zlib`` over ``summary +
+  question``, and its intent reranker with query-bigram coverage of the keyword list.
+  The post says "trained Zstandard text compression dictionary" and "bloom filter that
+  keeps track of important phrases"; both artifacts were already being built and
+  persisted by :mod:`cybernaut_mini.shard_artifacts` and read by nothing. Stage 6 reads
+  them, so the zlib proxy is gone rather than kept alongside.
+
+Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — stage 5 "Shard Selection"
+    (dense over HNSW, Bayesian dense, sparse TF-IDF, entity sparse, combined with RRF)
+    and stage 6 "Shard Reranking" (bloom, compression, neural, page rerankers, "once
+    again ... combined using reciprocal rank fusion"). Local copy:
+    ``docs/blog-archive/the-road-to-cybernaut-1.md``.
+
+Assumptions:
+    - [inferred] ``route`` runs stage 5 *and* stage 6 because its callers ask one
+      question ("give me shards"). The post separates them, and so does the code: the
+      two stage packages are independently usable and this module only orders them.
+    - [inferred] stage 6 reranks the whole stage-5 selection (``candidate_depth``
+      shards, 100 by default), and ``top_n`` truncates afterwards. Reranking only the
+      shards you were going to keep anyway cannot change which shards you keep.
+    - [inferred] the search intents stage 6 probes the bloom filters with are derived
+      here from the question with :func:`~cybernaut_mini.query.s3_intents.predict_intents`
+      over a *uniform* IDF table, because a :class:`~cybernaut_mini.indexing.LoadedIndex`
+      carries no global IDF statistic and building one would mean reading every shard.
+      Uniform IDF still ranks intents by term frequency and phrase length, and a caller
+      that has a real table passes ``idf_lookup=``. Pass ``intents=`` to supply stage 3's
+      own output.
+    - [inferred] the stage-5 structures (HNSW graph, keyword matrix, entity matrix) are
+      built once per ``(index, embedding model)`` and cached in a
+      :class:`weakref.WeakKeyDictionary`, because the agent calls ``route`` up to 18
+      times for one question and rebuilding a 200-shard HNSW graph per call would make
+      the amortised cost of the stage worse than the scan it replaced.
+
+Alternatives rejected:
+    - Keeping the old inline implementation behind a flag. Two implementations of one
+      stage is the confusion this rewrite exists to remove, and the old one is not a
+      cheaper approximation of the new one — it is a different, worse answer.
+    - Zero-filling ``RoutingSignals.dense``/``.sparse`` so they keep covering every
+      shard. That restores the O(n_shards) per-query cost purely to satisfy a trace
+      shape, which is the wrong trade at the corpus size this repo targets.
 """
 
 from __future__ import annotations
 
-import zlib
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
+from weakref import WeakKeyDictionary
 
-import numpy as np
-
-from cybernaut_mini.rrf import FusedItem, RankedList, rrf_fuse
+from cybernaut_mini.query.s3_intents import IdfLookup, SearchIntent, predict_intents
+from cybernaut_mini.query.s5_select import (
+    DEFAULT_CANDIDATE_DEPTH,
+    DENSE,
+    ENTITY,
+    SPARSE,
+    ShardSelection,
+    ShardSelector,
+)
+from cybernaut_mini.query.s6_rerank import RerankResult, rerank_index_shards
+from cybernaut_mini.rrf import FusedItem
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+
     from cybernaut_mini.config import RRFConfig
     from cybernaut_mini.indexing import LoadedIndex
     from cybernaut_mini.providers.embeddings import EmbeddingProvider
+    from cybernaut_mini.query.s6_rerank import ShardReranker
     from cybernaut_mini.text import TextProcessor
+
+__all__ = [
+    "BLOOM_RERANKER",
+    "COMPRESSION_RERANKER",
+    "DEFAULT_CANDIDATE_DEPTH",
+    "PAGE_RERANKER",
+    "RoutingSignals",
+    "query_intents",
+    "route",
+    "shard_selector",
+]
+
+#: Stage-6 reranker names, as they appear in :attr:`RoutingSignals.rerank_scores`.
+BLOOM_RERANKER = "bloom"
+COMPRESSION_RERANKER = "compression"
+PAGE_RERANKER = "pagerank"
 
 
 @dataclass
 class RoutingSignals:
-    """Per-shard component data produced by :func:`route`."""
+    """Per-shard component data produced by :func:`route`.
+
+    The first six fields are the original trace contract and keep their meaning, with
+    the two rerank fields now carrying stage 6's *real* rerankers instead of the zlib
+    and bigram approximations they used to hold:
+
+    ``dense``, ``sparse``, ``entity``
+        Stage-5 factor scores. Unlike the pre-stage-5 router these cover only the
+        shards each factor actually ranked (at most ``candidate_depth`` of them), not
+        every shard in the index — a factor that never visits a shard has no score for
+        it, and inventing a 0.0 would both cost O(n_shards) and lie about what was
+        computed. ``entity`` stays ``None`` when the question has no entities, so the
+        factor contributes no ranked list at all.
+    ``rerank_intent``
+        Stage 6's **bloom** reranker: the fraction of the question's search intents the
+        shard's phrase filter may have seen. 0.0 is the post's explicit downrank case.
+    ``rerank_compression``
+        Stage 6's **compression** reranker: the fractional saving the shard's trained
+        Zstandard dictionary buys on the question.
+    ``fused``
+        The final ranking, best first: stage 6's fusion when ``rerank=True``, stage 5's
+        when it is False.
+    """
 
     dense: dict[int, float]
     sparse: dict[int, float]
@@ -31,17 +136,88 @@ class RoutingSignals:
     rerank_intent: dict[int, float] | None
     rerank_compression: dict[int, float] | None
     fused: list[FusedItem]
+    #: Every stage-6 reranker's raw scores by name, including any that abstained.
+    rerank_scores: dict[str, dict[int, float]] = field(default_factory=dict)
+    #: Rerankers that scored every candidate identically and were dropped from the fusion.
+    rerank_abstained: tuple[str, ...] = ()
+    #: Rankers that actually voted in stage 6, in fusion order (``stage5`` first).
+    rerank_rankers: tuple[str, ...] = ()
+    #: The search intents stage 6 probed the bloom filters with.
+    intents: tuple[str, ...] = ()
+    #: How many shards each stage-5 factor was allowed to contribute.
+    candidate_depth: int = DEFAULT_CANDIDATE_DEPTH
+    #: Stage-5 order before reranking, best first.
+    selected: tuple[int, ...] = ()
+    #: Factors the post describes that this replica does not implement, and why.
+    omitted_factors: dict[str, str] = field(default_factory=dict)
+    #: The full stage-5 result, for callers that want the untruncated factor detail.
+    selection: ShardSelection | None = field(default=None, repr=False)
+    #: The full stage-6 result, or ``None`` when ``rerank=False``.
+    rerank: RerankResult | None = field(default=None, repr=False)
 
 
-def _cosine(a: dict[str, float], b: dict[str, float]) -> float:
-    """Cosine similarity between two sparse vectors represented as term->weight dicts."""
-    vocab = set(a) | set(b)
-    dot: float = sum(a.get(t, 0.0) * b.get(t, 0.0) for t in vocab)
-    norm_a: float = sum(v * v for v in a.values()) ** 0.5
-    norm_b: float = sum(v * v for v in b.values()) ** 0.5
-    if norm_a == 0.0 or norm_b == 0.0:
-        return 0.0
-    return dot / (norm_a * norm_b)
+# ------------------------------------------------------------------ #
+# Stage-5 selector cache                                              #
+# ------------------------------------------------------------------ #
+
+# Keyed by index, then by embedding-model identifier: the HNSW graph is a function of
+# the shard summaries and the model that embedded them, and the two sparse matrices are
+# a function of the manifests alone. None of the three depends on the question, the
+# processor or the RRF weights, which is why those are rebound on a cache hit.
+_SELECTORS: WeakKeyDictionary[Any, dict[str, ShardSelector]] = WeakKeyDictionary()
+
+
+def shard_selector(
+    index: LoadedIndex,
+    *,
+    provider: EmbeddingProvider,
+    processor: TextProcessor,
+    rrf_config: RRFConfig,
+    candidate_depth: int = DEFAULT_CANDIDATE_DEPTH,
+) -> ShardSelector:
+    """Return the cached :class:`ShardSelector` for ``index``, building it if needed.
+
+    The cache is weak on the index, so an index that goes out of scope takes its HNSW
+    graph with it. Callers that want a private selector (different HNSW parameters, an
+    injected entity extractor, exact dense search) should construct one directly and
+    pass it to :func:`route` as ``selector=``.
+    """
+    by_model = _SELECTORS.setdefault(index, {})
+    selector = by_model.get(provider.identifier)
+    if selector is None:
+        selector = ShardSelector(
+            index,
+            provider=provider,
+            processor=processor,
+            rrf_config=rrf_config,
+            candidate_depth=candidate_depth,
+        )
+        by_model[provider.identifier] = selector
+        return selector
+    # Query-side settings are cheap and may differ per call; the built structures do not.
+    selector.processor = processor
+    selector.entity_extractor = processor.entities
+    selector.rrf_config = rrf_config
+    selector.candidate_depth = candidate_depth
+    return selector
+
+
+def query_intents(
+    question: str,
+    *,
+    idf_lookup: IdfLookup | None = None,
+    top_k: int | None = 8,
+) -> tuple[SearchIntent, ...]:
+    """Stage-3 search intents for ``question``, for stage 6's bloom reranker.
+
+    ``idf_lookup`` defaults to an empty mapping, which
+    :func:`~cybernaut_mini.query.s3_intents.resolve_idf` turns into a uniform IDF of
+    1.0. That is a real approximation and it is deliberate: an index carries no global
+    IDF table, and deriving one would mean reading every shard on every query. With
+    uniform IDF the intents are still the question's highest-scoring contiguous runs of
+    content words, which is what the bloom filter is probed with.
+    """
+    return tuple(predict_intents(question, {} if idf_lookup is None else idf_lookup, top_k=top_k))
 
 
 def route(
@@ -53,198 +229,112 @@ def route(
     rrf_config: RRFConfig,
     top_n: int | None = None,
     rerank: bool = True,
+    intents: Sequence[SearchIntent] | None = None,
+    idf_lookup: IdfLookup | None = None,
+    candidate_depth: int = DEFAULT_CANDIDATE_DEPTH,
+    selector: ShardSelector | None = None,
+    rerankers: Sequence[ShardReranker] | None = None,
+    rerank_weights: Mapping[str, float] | None = None,
 ) -> tuple[list[int], RoutingSignals]:
-    """Score every shard, fuse, optionally rerank, and return shard ids best-first.
+    """Select shards (stage 5), rerank them (stage 6), return the ids best-first.
 
     Parameters
     ----------
     index:
-        A fully-loaded index.
+        A loaded index. Only shard manifests and — when ``rerank`` is set — the
+        selected shards' artifact sidecars are read; no document, token stream or BM25
+        index is touched.
     question:
         The user query string.
     processor:
-        :class:`~cybernaut_mini.text.TextProcessor` instance (must match build-time settings).
+        :class:`~cybernaut_mini.text.TextProcessor` instance (must match build-time
+        settings). Supplies the sparse factor's query terms and the entity factor's
+        entities.
     provider:
         Embedding provider compatible with the index.
     rrf_config:
-        Weights and ``k`` for RRF fusion.
+        Weights and ``k`` for both fusions.
     top_n:
         If given, cap the returned shard list to the top *n* shards.
     rerank:
-        When True, apply intent and compression rerankers on top of the initial fuse.
+        When True, run stage 6 over the stage-5 selection and return its order.
+    intents:
+        Stage-3 search intents. Derived from the question when omitted; pass ``()`` to
+        run stage 6 without the bloom reranker having anything to probe.
+    idf_lookup:
+        IDF table for the derived intents. See :func:`query_intents`.
+    candidate_depth:
+        How many shards each stage-5 factor may contribute, and therefore roughly how
+        many shards stage 6 reranks.
+    selector:
+        A pre-built :class:`ShardSelector`; the cached one is used when omitted.
+    rerankers, rerank_weights:
+        Stage-6 overrides, e.g. appending
+        :func:`~cybernaut_mini.query.s6_rerank.create_neural_reranker`.
 
     Returns
     -------
     tuple[list[int], RoutingSignals]
         Shard ids ordered best-first, plus the full signal trace.
     """
-    shard_ids = sorted(index.manifests.keys())
+    active = selector or shard_selector(
+        index,
+        provider=provider,
+        processor=processor,
+        rrf_config=rrf_config,
+        candidate_depth=candidate_depth,
+    )
+    selection = active.select(question, candidate_depth=candidate_depth)
 
-    # ------------------------------------------------------------------
-    # 1. Dense scores: cosine(query_vector, shard_centroid)
-    # ------------------------------------------------------------------
-    query_vector = provider.embed_queries([question])[0]
+    dense_factor = selection.signals.factor(DENSE)
+    sparse_factor = selection.signals.factor(SPARSE)
+    entity_factor = selection.signals.factor(ENTITY)
 
-    dense_scores: dict[int, float] = {}
-    for sid in shard_ids:
-        centroid = np.array(index.manifests[sid].centroid, dtype=np.float32)
-        dense_scores[sid] = float(query_vector @ centroid)
-
-    dense_ranked = sorted(shard_ids, key=lambda s: (-dense_scores[s], s))
-
-    # ------------------------------------------------------------------
-    # 2. Sparse scores: TF-IDF keyword cosine
-    # ------------------------------------------------------------------
-    query_tokens = processor.content_tokens(question)
-    query_tf: dict[str, float] = {}
-    for tok in query_tokens:
-        query_tf[tok] = query_tf.get(tok, 0.0) + 1.0
-
-    sparse_scores: dict[int, float] = {}
-    for sid in shard_ids:
-        shard_kw: dict[str, float] = {
-            kw.term: kw.weight for kw in index.manifests[sid].keywords
-        }
-        sparse_scores[sid] = _cosine(query_tf, shard_kw)
-
-    sparse_ranked = sorted(shard_ids, key=lambda s: (-sparse_scores[s], s))
-
-    # ------------------------------------------------------------------
-    # 3. Entity scores (omitted entirely when query has no entities)
-    # ------------------------------------------------------------------
-    query_entities = set(processor.entities(question))
-
-    entity_scores: dict[int, float] | None = None
-    entity_ranked: list[int] | None = None
-
-    if query_entities:
-        entity_scores = {}
-        for sid in shard_ids:
-            manifest = index.manifests[sid]
-            overlap = sum(
-                e.count for e in manifest.entities if e.text in query_entities
-            )
-            total_entity_count = sum(e.count for e in manifest.entities)
-            entity_scores[sid] = overlap / (1 + total_entity_count)
-        _entity_scores = entity_scores
-        entity_ranked = sorted(shard_ids, key=lambda s: (-_entity_scores[s], s))
-
-    # ------------------------------------------------------------------
-    # 4. Initial RRF fuse
-    # ------------------------------------------------------------------
-    ranked_lists: list[RankedList] = [
-        RankedList(
-            name="dense",
-            weight=rrf_config.dense_weight,
-            ids=tuple(str(s) for s in dense_ranked),
-            scores=tuple(dense_scores[s] for s in dense_ranked),
-        ),
-        RankedList(
-            name="sparse",
-            weight=rrf_config.lexical_weight,
-            ids=tuple(str(s) for s in sparse_ranked),
-            scores=tuple(sparse_scores[s] for s in sparse_ranked),
-        ),
-    ]
-
-    if entity_ranked is not None and entity_scores is not None:
-        ranked_lists.append(
-            RankedList(
-                name="entity",
-                weight=rrf_config.entity_weight,
-                ids=tuple(str(s) for s in entity_ranked),
-                scores=tuple(entity_scores[s] for s in entity_ranked),
-            )
-        )
-
-    initial_fused = rrf_fuse(ranked_lists, k=rrf_config.k)
-
-    # ------------------------------------------------------------------
-    # 5. Rerank (intent + compression), then second fuse
-    # ------------------------------------------------------------------
-    rerank_intent: dict[int, float] | None = None
-    rerank_compression: dict[int, float] | None = None
-    final_fused = initial_fused
-
-    if rerank:
-        routed_shard_ids = [int(item.id) for item in initial_fused]
-
-        # -- Intent: bigram coverage --
-        tokens = processor.content_tokens(question)
-        bigrams: list[tuple[str, str]] = []
-        for i in range(len(tokens) - 1):
-            bigrams.append((tokens[i], tokens[i + 1]))
-
-        intent_ranked: list[int] | None = None
-        if bigrams:
-            rerank_intent = {}
-            for sid in routed_shard_ids:
-                manifest = index.manifests[sid]
-                kw_terms = {kw.term for kw in manifest.keywords}
-                graph = manifest.term_graph
-                covered = 0
-                for a, b in bigrams:
-                    # Covered if both terms in keyword list, or connected in term_graph
-                    if (a in kw_terms and b in kw_terms) or (
-                        (a in graph and b in graph[a]) or (b in graph and a in graph[b])
-                    ):
-                        covered += 1
-                rerank_intent[sid] = covered / len(bigrams)
-            _rerank_intent = rerank_intent
-            intent_ranked = sorted(routed_shard_ids, key=lambda s: (-_rerank_intent[s], s))
-
-        # -- Compression: zlib compression gain --
-        q_compressed_len = max(1, len(zlib.compress(question.encode())))
-        rerank_compression = {}
-        for sid in routed_shard_ids:
-            summary = index.manifests[sid].summary
-            base = len(zlib.compress(summary.encode()))
-            combined = len(zlib.compress((summary + " " + question).encode()))
-            rerank_compression[sid] = 1.0 - (combined - base) / q_compressed_len
-        _rerank_compression = rerank_compression
-        compression_ranked = sorted(
-            routed_shard_ids, key=lambda s: (-_rerank_compression[s], s)
-        )
-
-        # Build second fuse: initial result as "route" ranker + optional intent + compression
-        second_lists: list[RankedList] = [
-            RankedList(
-                name="route",
-                weight=1.0,
-                ids=tuple(str(s) for s in routed_shard_ids),
-            ),
-        ]
-        if intent_ranked is not None:
-            second_lists.append(
-                RankedList(
-                    name="intent",
-                    weight=1.0,
-                    ids=tuple(str(s) for s in intent_ranked),
-                    scores=tuple(rerank_intent[s] for s in intent_ranked),  # type: ignore[index]
-                )
-            )
-        second_lists.append(
-            RankedList(
-                name="compression",
-                weight=1.0,
-                ids=tuple(str(s) for s in compression_ranked),
-                scores=tuple(rerank_compression[s] for s in compression_ranked),
-            )
-        )
-
-        final_fused = rrf_fuse(second_lists, k=rrf_config.k)
-
-    signals = RoutingSignals(
-        dense=dense_scores,
-        sparse=sparse_scores,
-        entity=entity_scores,
-        rerank_intent=rerank_intent,
-        rerank_compression=rerank_compression,
-        fused=final_fused,
+    resolved_intents = (
+        query_intents(question, idf_lookup=idf_lookup) if intents is None else tuple(intents)
     )
 
-    result_ids = [int(item.id) for item in final_fused]
+    rerank_result: RerankResult | None = None
+    fused: list[FusedItem] = list(selection.signals.fused)
+    result_ids = list(selection.shard_ids)
+
+    if rerank and result_ids:
+        rerank_result = rerank_index_shards(
+            index,
+            question,
+            selected=result_ids,
+            intents=resolved_intents,
+            rerankers=rerankers,
+            weights=rerank_weights,
+            k=rrf_config.k,
+        )
+        fused = list(rerank_result.fused) or fused
+        result_ids = list(rerank_result.shard_ids)
+
+    scores = (
+        {name: dict(values) for name, values in rerank_result.scores.items()}
+        if rerank_result is not None
+        else {}
+    )
+
+    signals = RoutingSignals(
+        dense=dict(dense_factor.scores),
+        sparse=dict(sparse_factor.scores),
+        entity=dict(entity_factor.scores) if entity_factor.applied else None,
+        rerank_intent=scores.get(BLOOM_RERANKER),
+        rerank_compression=scores.get(COMPRESSION_RERANKER),
+        fused=fused,
+        rerank_scores=scores,
+        rerank_abstained=() if rerank_result is None else rerank_result.abstained,
+        rerank_rankers=() if rerank_result is None else rerank_result.rankers,
+        intents=tuple(intent.text for intent in resolved_intents) if rerank else (),
+        candidate_depth=selection.signals.candidate_depth,
+        selected=tuple(selection.shard_ids),
+        omitted_factors=dict(selection.signals.omitted_factors),
+        selection=selection,
+        rerank=rerank_result,
+    )
+
     if top_n is not None:
         result_ids = result_ids[:top_n]
-
     return result_ids, signals

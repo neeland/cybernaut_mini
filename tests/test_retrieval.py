@@ -2,6 +2,21 @@
 
 All tests use HashEmbedder(dim=64) and TextProcessor(use_spacy=False):
 no network, no spaCy.
+
+Stage 8 moved two of this module's functions without changing what they must do:
+
+* ``retrieval.make_snippet(text, query_tokens=tokens)`` is now
+  :func:`cybernaut_mini.query.s8_retrieve.make_snippet`, which takes the query tokens
+  by keyword and accepts intent matches as a higher-priority anchor. The snippet tests
+  below are the originals, repointed at the new home and unchanged in what they assert.
+* ``retrieval.merge_shard_results`` / ``ShardHit`` are now
+  :func:`cybernaut_mini.query.s8_retrieve.reduce_responses` over
+  :class:`~cybernaut_mini.query.s8_retrieve.ShardResponse`. The two properties the old
+  merge tests pinned — a document found in two shards keeps its *best* score rather
+  than the sum, and ties break on ascending doc id — are re-asserted against the new
+  function. The old third case (summing across query *variants*) is gone with the
+  feature: ``merge_shard_results`` was only ever called with a single variant, so that
+  branch had no production caller.
 """
 
 from __future__ import annotations
@@ -14,12 +29,12 @@ from cybernaut_mini.config import RRFConfig
 from cybernaut_mini.indexing import LoadedIndex
 from cybernaut_mini.models import MetadataFilter
 from cybernaut_mini.providers.embeddings import HashEmbedder
-from cybernaut_mini.retrieval import (
-    ShardHit,
+from cybernaut_mini.query.s8_retrieve import (
+    ShardResponse,
     make_snippet,
-    merge_shard_results,
-    retrieve,
+    reduce_responses,
 )
+from cybernaut_mini.retrieval import retrieve
 from cybernaut_mini.text import TextProcessor, normalize
 
 # ------------------------------------------------------------------ #
@@ -275,15 +290,15 @@ def test_filter_published_to(
 
 def test_snippet_max_500_chars() -> None:
     text = "word " * 200  # 1000 chars
-    snippet = make_snippet(text, ["word"])
+    snippet = make_snippet(text, query_tokens=["word"])
     assert len(snippet) <= 500
 
 
 def test_snippet_deterministic() -> None:
     text = "The quick brown fox jumps over the lazy dog. " * 20
     tokens = ["fox"]
-    s1 = make_snippet(text, tokens)
-    s2 = make_snippet(text, tokens)
+    s1 = make_snippet(text, query_tokens=tokens)
+    s2 = make_snippet(text, query_tokens=tokens)
     assert s1 == s2
 
 
@@ -292,7 +307,7 @@ def test_snippet_centers_on_earliest_match() -> None:
     prefix = "unrelated content repeated here again and again " * 30
     suffix = " remarkable appears right here in the text"
     text = prefix + suffix
-    snippet = make_snippet(text, ["remarkable"])
+    snippet = make_snippet(text, query_tokens=["remarkable"])
     # Snippet must contain the query token.
     assert "remarkable" in snippet, (
         f"Snippet should contain query token; got: {snippet!r}"
@@ -306,7 +321,7 @@ def test_snippet_centers_on_earliest_match() -> None:
 
 def test_snippet_no_match_falls_back_to_leading() -> None:
     text = "Alpha bravo charlie delta echo foxtrot golf hotel india juliet " * 5
-    snippet = make_snippet(text, ["nonexistenttoken123"])
+    snippet = make_snippet(text, query_tokens=["nonexistenttoken123"])
     norm = normalize(text)
     # Should start from beginning.
     assert norm.startswith(snippet) or snippet in norm[:600]
@@ -316,7 +331,7 @@ def test_snippet_no_match_falls_back_to_leading() -> None:
 def test_snippet_no_word_split() -> None:
     text = "word " * 200
     tokens = ["word"]
-    snippet = make_snippet(text, tokens)
+    snippet = make_snippet(text, query_tokens=tokens)
     norm = normalize(text)
     # Snippet must be a substring of the normalized text.
     assert snippet in norm or snippet == norm[: len(snippet)], (
@@ -339,51 +354,32 @@ def test_snippet_no_word_split() -> None:
 
 
 # ------------------------------------------------------------------ #
-# merge_shard_results                                                 #
+# Cross-shard reduce (was merge_shard_results)                        #
 # ------------------------------------------------------------------ #
 
 
-def _make_shard_hit(doc_id: str, shard_id: int, score: float) -> ShardHit:
-    return ShardHit(
-        doc_id=doc_id,
-        shard_id=shard_id,
-        bm25_score=None,
-        bm25_rank=None,
-        dense_score=score,
-        dense_rank=1,
-        fused_score=score,
-        rrf_contributions={},
+def test_reduce_same_doc_two_shards_keeps_best(rrf_config: RRFConfig) -> None:
+    """Same doc returned by two shards: keep the best score, never the sum."""
+    responses = [
+        ShardResponse(shard_id=0, lexical=(("doc-x", 0.8),)),
+        ShardResponse(shard_id=1, lexical=(("doc-x", 0.3),)),
+    ]
+    candidates = reduce_responses(responses, mode="lexical", rrf_config=rrf_config)
+    assert len(candidates) == 1, "the duplicated document must be emitted once"
+    assert candidates[0].score == pytest.approx(0.8), (
+        f"expected the best score 0.8, not the sum 1.1; got {candidates[0].score}"
     )
+    # The reduce still records that both shards returned it.
+    assert candidates[0].shard_ids == (0, 1)
 
 
-def test_merge_same_doc_two_shards_keeps_best() -> None:
-    """Same doc in two shards of one variant: keep best score (not sum)."""
-    hit_a = _make_shard_hit("doc-x", shard_id=0, score=0.8)
-    hit_b = _make_shard_hit("doc-x", shard_id=1, score=0.3)
-    result = merge_shard_results([("v1", [hit_a, hit_b])], top_k=5)
-    assert len(result) == 1
-    _variant, best_hit, final_score = result[0]
-    # best score is 0.8 (not 0.8 + 0.3)
-    assert abs(final_score - 0.8) < 1e-6, f"Expected 0.8, got {final_score}"
-    assert best_hit.shard_id == 0
-
-
-def test_merge_same_doc_two_variants_sums() -> None:
-    """Same doc in two variants: final score = sum of per-variant bests."""
-    hit_v1 = _make_shard_hit("doc-x", shard_id=0, score=0.5)
-    hit_v2 = _make_shard_hit("doc-x", shard_id=0, score=0.4)
-    result = merge_shard_results([("v1", [hit_v1]), ("v2", [hit_v2])], top_k=5)
-    assert len(result) == 1
-    _variant, _hit, final_score = result[0]
-    assert abs(final_score - 0.9) < 1e-6, f"Expected 0.9, got {final_score}"
-
-
-def test_merge_deterministic_order_on_ties() -> None:
-    """Tied scores sort by doc_id ascending."""
-    hit_b = _make_shard_hit("doc-b", shard_id=0, score=0.5)
-    hit_a = _make_shard_hit("doc-a", shard_id=0, score=0.5)
-    result = merge_shard_results([("v1", [hit_b, hit_a])], top_k=5)
-    doc_ids = [hit.doc_id for _, hit, _ in result]
+def test_reduce_deterministic_order_on_ties(rrf_config: RRFConfig) -> None:
+    """Tied scores sort by doc_id ascending, whatever order the shards answered in."""
+    responses = [
+        ShardResponse(shard_id=0, lexical=(("doc-b", 0.5), ("doc-a", 0.5))),
+    ]
+    candidates = reduce_responses(responses, mode="lexical", rrf_config=rrf_config)
+    doc_ids = [candidate.doc_id for candidate in candidates]
     assert doc_ids == sorted(doc_ids), f"Expected ascending doc_id order; got {doc_ids}"
 
 

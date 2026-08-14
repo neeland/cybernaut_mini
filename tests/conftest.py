@@ -240,7 +240,7 @@ def _build_index_impl(index_path: Path) -> None:
         _shard_title,
         compute_entities,
         compute_keywords,
-        compute_term_graph,
+        compute_shard_term_graphs,
     )
 
     processor = TextProcessor(use_spacy=False)
@@ -280,10 +280,20 @@ def _build_index_impl(index_path: Path) -> None:
     }
 
     keywords_by_shard = compute_keywords(shard_tokens, max_keywords=30)
-    global_term_graph = compute_term_graph(
-        [doc_tokens.get(doc.id, []) for doc in docs],
+    # One graph per shard, from that shard's own documents — the same call the Kedro
+    # build node makes. A single graph over the whole corpus (what this fixture used
+    # to build) gives every manifest an identical, corpus-sized graph, so every test
+    # that reaches manifest.term_graph would exercise behaviour the shipped build no
+    # longer produces. write_index emits GlobalTermGraphWarning when it sees one.
+    term_graph_by_shard = compute_shard_term_graphs(
+        shard_doc_ids,
+        doc_tokens,
         window=5,
         min_edge_count=2,
+        priority_terms={
+            shard_id: [kw.term for kw in keywords]
+            for shard_id, keywords in keywords_by_shard.items()
+        },
     )
 
     embedding_model = f"hash-{embedder.dim}"
@@ -307,7 +317,7 @@ def _build_index_impl(index_path: Path) -> None:
                 summary=summary,
                 keywords=keywords,
                 entities=entities,
-                term_graph=global_term_graph,
+                term_graph=term_graph_by_shard[shard_id],
                 document_count=len(doc_ids),
                 embedding_model=embedding_model,
             )

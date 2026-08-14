@@ -1,11 +1,19 @@
-"""Tests for shard routing: routing.route() and RoutingSignals."""
+"""Tests for shard routing: routing.route() and RoutingSignals.
+
+``route`` no longer implements shard selection or shard reranking; it composes blog
+stage 5 (:mod:`cybernaut_mini.query.s5_select`) and blog stage 6
+(:mod:`cybernaut_mini.query.s6_rerank`). These tests therefore assert the composition
+and the trace contract, and leave the stages' internals to ``test_s5_select.py``.
+"""
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 from cybernaut_mini.config import RRFConfig
 from cybernaut_mini.indexing import LoadedIndex
+from cybernaut_mini.models import IndexMeta, ShardKeyword, ShardManifest
 from cybernaut_mini.providers.embeddings import HashEmbedder
 from cybernaut_mini.routing import route
 from cybernaut_mini.rrf import RankedList, rrf_fuse
@@ -54,12 +62,23 @@ def test_route_returns_valid_shard_ids(
     assert all(s in valid for s in shard_ids)
 
 
-def test_dense_and_sparse_cover_every_shard(
+def test_factor_scores_are_valid_shards_and_dense_ranks_them_all_when_they_fit(
     built_index: LoadedIndex,
     processor: TextProcessor,
     embedder: HashEmbedder,
     rrf_cfg: RRFConfig,
 ) -> None:
+    """Factors score the shards they ranked, never a shard id the index does not have.
+
+    This replaces an older assertion that BOTH factors covered EVERY shard. That was a
+    statement about the brute-force router that stage 5 exists to replace: the dense
+    factor now answers from an HNSW graph truncated at ``candidate_depth`` and the
+    sparse factor walks a CSC matrix that never visits a shard sharing no query term.
+    With four shards and a default depth of 100 the dense factor still covers all of
+    them — that part is asserted — but the sparse factor deliberately does not, and
+    ``test_sparse_factor_skips_shards_that_share_no_query_term`` pins that as the
+    property it is.
+    """
     _shard_ids, signals = route(
         built_index,
         "climate feedback loops",
@@ -67,9 +86,99 @@ def test_dense_and_sparse_cover_every_shard(
         provider=embedder,
         rrf_config=rrf_cfg,
     )
-    expected = set(built_index.manifests.keys())
-    assert set(signals.dense.keys()) == expected
-    assert set(signals.sparse.keys()) == expected
+    valid = set(built_index.manifests.keys())
+    assert set(signals.dense.keys()) == valid, "every shard fits inside candidate_depth"
+    assert set(signals.sparse.keys()) <= valid
+    assert signals.candidate_depth >= len(valid)
+
+
+def test_sparse_factor_skips_shards_that_share_no_query_term(
+    built_index: LoadedIndex,
+    processor: TextProcessor,
+    embedder: HashEmbedder,
+    rrf_cfg: RRFConfig,
+) -> None:
+    """A shard whose keyword list shares nothing with the query is never scored."""
+    question = "solar panel efficiency"
+    _shard_ids, signals = route(
+        built_index,
+        question,
+        processor=processor,
+        provider=embedder,
+        rrf_config=rrf_cfg,
+    )
+    query_terms = set(processor.content_tokens(question))
+    for shard_id in built_index.manifests:
+        shares = query_terms & {kw.term for kw in built_index.manifests[shard_id].keywords}
+        if not shares:
+            assert shard_id not in signals.sparse, (
+                f"shard {shard_id} shares no query term but was still scored"
+            )
+    assert signals.sparse, "the query must match at least one shard for this to mean anything"
+    assert len(signals.sparse) < len(built_index.manifests), (
+        "the point of the sparse factor is that it does not visit every shard"
+    )
+
+
+def _synthetic_index(n_shards: int) -> LoadedIndex:
+    """A manifest-only index with more shards than a small candidate_depth."""
+    from cybernaut_mini.models import Document
+
+    docs = [Document(id=f"doc-{i}", title=f"T{i}", text=f"body {i}") for i in range(n_shards)]
+    vectors = np.zeros((n_shards, 4), dtype=np.float32)
+    vectors[:, 0] = 1.0
+    manifests = {
+        shard_id: ShardManifest(
+            shard_id=shard_id,
+            document_ids=[f"doc-{shard_id}"],
+            centroid=[1.0, 0.0, 0.0, 0.0],
+            title=f"shard-{shard_id}",
+            summary=f"summary about topic {shard_id}",
+            keywords=[ShardKeyword(term="solar", weight=0.5)],
+            entities=[],
+            term_graph={},
+            document_count=1,
+            embedding_model="hash-4",
+        )
+        for shard_id in range(n_shards)
+    }
+    return LoadedIndex(
+        meta=IndexMeta(
+            embedding_model="hash-4",
+            embedding_dim=4,
+            n_shards=n_shards,
+            n_documents=n_shards,
+            seed=0,
+        ),
+        documents=docs,
+        vectors=vectors,
+        row_map={doc.id: i for i, doc in enumerate(docs)},
+        manifests=manifests,
+        doc_tokens={doc.id: ["placeholder"] for doc in docs},
+    )
+
+
+def test_route_scores_at_most_candidate_depth_shards(
+    processor: TextProcessor,
+    rrf_cfg: RRFConfig,
+) -> None:
+    """The 1M-document property: routing cost is bounded by depth, not by shard count."""
+    index = _synthetic_index(60)
+    embedder = HashEmbedder(dim=4)
+    _shard_ids, signals = route(
+        index,
+        "solar energy",
+        processor=processor,
+        provider=embedder,
+        rrf_config=rrf_cfg,
+        candidate_depth=10,
+        rerank=False,
+    )
+    assert len(index.manifests) == 60
+    assert signals.candidate_depth == 10
+    assert len(signals.dense) <= 10
+    assert len(signals.sparse) <= 10
+    assert len(signals.fused) <= 20, "at most one candidate list per applied factor"
 
 
 # ---------------------------------------------------------------------------
