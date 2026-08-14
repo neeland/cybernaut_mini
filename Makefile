@@ -1,10 +1,25 @@
-.PHONY: install install-prod env test lint typecheck check \
+.PHONY: install install-mac install-prod env accel test lint typecheck check \
 	build-sample search-sample eval-sample \
 	ingest ingest-prod build-prod eval-pipeline viz pipelines \
 	notebooks lab entire doctor
 
 install: env
 	uv sync
+
+# ------------------------------------------------------------------ #
+# Native macOS — the default development environment                  #
+# ------------------------------------------------------------------ #
+
+# Apple silicon: Accelerate-linked numpy, torch with the MPS backend, and thread
+# counts tuned to performance cores. The devcontainer is still supported (see
+# `install`) but is native arm64 *Linux*, which reaches none of those.
+install-mac: env
+	scripts/setup_mac.sh
+
+# What this machine actually offers: BLAS, SIMD, torch backend, resolved device.
+# Run it after install-mac, and any time a build looks slower than it should.
+accel:
+	uv run python -c "from cybernaut_mini.accel import describe; print(describe().render())"
 
 # Corpus acquisition from the Hub plus real sentence-transformers embeddings.
 install-prod: env

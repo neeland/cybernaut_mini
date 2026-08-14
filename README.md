@@ -54,6 +54,77 @@ installed.
 
 ---
 
+## Environment
+
+**Native macOS on Apple silicon is the default.** The devcontainer still builds
+and is kept for a possible move to AWS, but Docker Desktop's VM is native arm64
+*Linux*, which is not the same thing as Apple silicon: no Metal, no Neural
+Engine, and numpy on OpenBLAS rather than Accelerate.
+
+```bash
+make install-mac      # uv sync --extra st --extra mps --extra hf, then verify
+make accel            # what this machine actually offers
+```
+
+`make accel` resolves rather than assumes:
+
+```
+platform       darwin / arm64  (Apple silicon)
+numpy BLAS     accelerate
+numpy SIMD     ASIMDHP,ASIMDDP,ASIMDFHM
+torch          2.13.0
+torch backend  mps
+device         mps
+fingerprint    mps
+```
+
+`setup_mac.sh` fails loudly on the two things that go wrong silently: numpy
+linking OpenBLAS instead of Accelerate (so the AMX path is not in play), and
+torch resolving to `cpu` on Apple silicon (usually an x86 Python under Rosetta).
+
+Thread tuning must be exported *before* Python starts — BLAS and OpenMP read
+their thread counts once, when the shared library loads, so setting them from
+inside a running process does nothing. `scripts/with-accel.sh` does it and execs:
+
+```bash
+scripts/with-accel.sh uv run cybernaut-mini build ...
+```
+
+On Apple silicon it caps threads at 4. The 8 logical cores are 4 performance +
+4 efficiency, and a GEMM spread across both waits on the slowest thread.
+
+### What acceleration does and does not buy you
+
+`embedding.device` (`auto` | `mps` | `cuda` | `cpu`) applies to the
+`sentence_transformers` provider only; `hash` and `model2vec` never import
+torch. An unavailable explicit choice degrades to CPU rather than raising, so
+one config travels between a Mac and a Linux box.
+
+Measured on a 16k-document build, the cost is **not** in the parts hardware
+accelerates:
+
+| | |
+|---|---|
+| joblib/loky process-pool coordination | ~37s self (`time.sleep`), plus locks and pickling |
+| Kedro `MemoryDataset` deepcopy | 21.6M calls, ~32s cumulative |
+| `compute_term_graph` | ~15s — the only real computation in the top five |
+| embedding (model2vec) | 2.6s |
+
+Accelerate and MPS act on the last row. Expect a better place to work, not a
+dramatically faster build.
+
+### Determinism
+
+Byte-identical rebuilds are a **per-device** guarantee, not a cross-device one.
+MPS and CPU do not produce bit-identical vectors — different kernels accumulate
+in different orders, and no flag makes a GPU reduction match a CPU one bit for
+bit. `accel.device_fingerprint()` renders the device so an index can record what
+produced it; comparing two indexes byte-for-byte is only meaningful when their
+fingerprints agree. The `hash` provider is exempt and stays the offline
+reproducibility anchor.
+
+---
+
 ## Offline quick start
 
 ```bash
@@ -115,15 +186,25 @@ uv run kedro run --pipeline evaluation \
 
 ```
 artifacts/<index>/
-  _VALID               # written last; loaders reject an index without this marker
-  index_meta.json      # embedding_model, embedding_dim, n_shards, n_documents, seed
-  documents.jsonl      # canonical-JSON, one Document per line (sorted keys)
-  embeddings.npy       # float32 [n_docs x dim]
-  row_map.json         # {doc_id -> row index}
-  tokens.jsonl         # {id, tokens} per doc
+  _VALID                     # written last; loaders reject an index without this marker
+  index_meta.json            # embedding_model, embedding_dim, n_shards, n_documents,
+                             # seed, artifact_version ("2"; version "1" is rejected)
+  documents.jsonl            # canonical-JSON, one Document per line (sorted keys)
+  documents.jsonl.jsonlidx/  # byte-offset sidecar; lets a doc be read without
+                             # parsing the whole file (rebuilt if missing or stale)
+  embeddings.npy             # float32 [n_docs x dim], memory-mapped at load
+  row_map.json               # {doc_id -> row index}; still written, no longer parsed
+                             # (row lookups go through the documents sidecar)
+  tokens.jsonl               # {id, tokens} per doc
+  tokens.jsonl.jsonlidx/     # byte-offset sidecar for tokens.jsonl
   shards/
-    shard_000.json     # ShardManifest: centroid, keywords, entities, term_graph
-    ...
+    shard_000.json           # ShardManifest: centroid, keywords, entities, term_graph.
+    ...                      # Shard-id width grows with n_shards, so 1,000+ shards
+                             # zero-pad to shard_0000.json and still sort lexically.
+    artifacts/
+      shard_000.json         # per-shard phrase bloom, zstd dictionary, vocabulary.
+      ...                    # Stored beside the manifest, not inline in it, and read
+                             # one shard at a time via LoadedIndex.shard_artifacts().
 
 data/sample/
   documents.jsonl      # 63 synthetic docs across 6 topics, seed 42

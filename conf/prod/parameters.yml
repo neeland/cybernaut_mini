@@ -3,17 +3,22 @@
 embedding:
   provider: sentence_transformers
   model: intfloat/multilingual-e5-small
-  # REQUIRED in this environment. Left unset deliberately: a made-up SHA would be
-  # worse than no SHA. ReproducibilityHooks aborts a --env prod run while this is
-  # null, naming this file. Resolve the real value once, then paste it here:
+  # REQUIRED in this environment. ReproducibilityHooks aborts a --env prod run
+  # while this is null, naming this file. Resolved 2026-08-14 from:
   #   uv run python -c "from huggingface_hub import HfApi; \
   #     print(HfApi().model_info('intfloat/multilingual-e5-small').sha)"
-  revision: null
+  revision: 614241f622f53c4eeff9890bdc4f31cfecc418b3
 
 index:
   # Shard count drives serving cost: too few and each shard is slow to search,
-  # too many and routing dominates. ~2k documents per shard at this scale.
-  n_shards: 64
+  # too many and routing dominates. 256 shards over the full 100k corpus is
+  # ~390 documents per shard — chosen so shard *selection* (stages 5-7) has a
+  # few hundred candidates to discriminate between, which is the regime those
+  # stages are written for, while each shard still holds enough text for its
+  # vocabulary, bloom filter and zstd dictionary to carry signal. 64 shards
+  # (1.5k docs each) leaves routing under-exercised; 512 (195 docs each) starts
+  # to thin the per-shard artifacts.
+  n_shards: 256
   max_keywords: 50
   max_entities: 50
   cooccurrence_window: 5

@@ -24,6 +24,16 @@ KEYS = [
     "NOSIBLE_API_KEY",
     "HF_TOKEN",
     "GITHUB_PERSONAL_ACCESS_TOKEN",
+    # Query stage 1 reads its translation credential from the environment at call
+    # time, preferring OPENROUTER_API_KEY (the default base_url is OpenRouter's,
+    # which is the provider the blog post itself uses). Without this entry the key
+    # sits in .env and never reaches the session, so translation fails with a
+    # missing-credential error while .env looks correctly populated.
+    "OPENROUTER_API_KEY",
+    # The same stage's second choice, consulted only when OPENROUTER_API_KEY is
+    # empty. Also carries the credential for a self-hosted OpenAI-compatible
+    # server (vLLM, Ollama, llama.cpp), which ignores its value but requires one.
+    "OPENAI_API_KEY",
 ]
 
 REPO_ROOT = Path(__file__).resolve().parent.parent

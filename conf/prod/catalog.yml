@@ -13,14 +13,15 @@ raw_corpus_source:
   repo_id: NOSIBLE/prediction
   # REQUIRED: an immutable commit SHA or tag. Branch names and this placeholder
   # are both rejected at load time, so an unpinned corpus cannot reach a build.
-  # Resolve the real SHA once, then paste it here:
+  # Resolved 2026-08-14 from:
   #   uv run python -c "from huggingface_hub import HfApi; \
   #     print(HfApi().dataset_info('NOSIBLE/prediction').sha)"
-  revision: REPLACE_WITH_COMMIT_SHA
+  revision: eefc2260041afc60bb8f8e343cf43a20e7828a4a
   split: train
   columns: [text, label, netloc, url]
-  # Cap the pull while dialling in the build; remove for the full 100k rows.
-  max_rows: 20000
+  # Uncapped: the full 100,000 rows (26.9 MB parquet, 71.4 MB in Arrow). Set
+  # max_rows to dial in a faster build; the cap is a prefix, not a sample, so a
+  # capped run is not a statistically valid preview of the full one.
 
 # Keep production artifacts out of the sample paths so a prod run can never
 # overwrite the committed sample index.
