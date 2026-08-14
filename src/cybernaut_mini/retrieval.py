@@ -166,7 +166,7 @@ class ShardHit:
 # ------------------------------------------------------------------ #
 
 
-def search_shard(
+def score_shard_components(
     index: LoadedIndex,
     shard_id: int,
     *,
@@ -175,19 +175,17 @@ def search_shard(
     query_vector: FloatArray | None,
     mode: str,
     metadata_filter: MetadataFilter | None,
-    rrf_k: int,
-    lexical_weight: float,
-    dense_weight: float,
-    limit: int,
-) -> list[ShardHit]:
-    """Search one shard and return up to ``limit`` ShardHits.
+) -> tuple[list[tuple[str, float]], list[tuple[str, float]]]:
+    """Score one shard's candidates, returning ``(lexical, dense)`` lists, best first.
 
-    Steps:
-    1. Filter candidate docs by metadata.
-    2. Score lexically (BM25 + expansion) for modes "lexical"/"hybrid".
-    3. Score densely (cosine) for modes "dense"/"hybrid".
-    4. Fuse with RRF for "hybrid"; use raw score for "lexical"/"dense".
-    5. Return top ``limit`` hits.
+    Split out of :func:`search_shard` so :func:`retrieve` can fuse hybrid results
+    across ALL shards at once. Fusing inside each shard first would restart the
+    ranks at 1 per shard, which is not comparable across shards — see the note on
+    :func:`retrieve`.
+
+    Each list is ``(doc_id, score)`` sorted by ``(-score, doc_id)``. Lexical scores
+    are BM25 (zero-scoring docs dropped); dense scores are cosine. A list is empty
+    when the mode does not use that ranker.
     """
     manifest = index.manifests[shard_id]
     bm25 = index.bm25[shard_id]
@@ -204,7 +202,7 @@ def search_shard(
         candidate_indices = list(range(len(doc_ids)))
 
     if not candidate_indices:
-        return []
+        return [], []
 
     candidate_ids = [doc_ids[i] for i in candidate_indices]
 
@@ -233,6 +231,42 @@ def search_shard(
             cosine = float(vec @ query_vector)
             dense_ranked.append((doc_id, cosine))
         dense_ranked.sort(key=lambda t: (-t[1], t[0]))
+
+    return lex_ranked, dense_ranked
+
+
+def search_shard(
+    index: LoadedIndex,
+    shard_id: int,
+    *,
+    query_tokens: list[str],
+    expansion_tokens: list[str],
+    query_vector: FloatArray | None,
+    mode: str,
+    metadata_filter: MetadataFilter | None,
+    rrf_k: int,
+    lexical_weight: float,
+    dense_weight: float,
+    limit: int,
+) -> list[ShardHit]:
+    """Search one shard and return up to ``limit`` ShardHits.
+
+    Steps:
+    1. Filter candidate docs by metadata.
+    2. Score lexically (BM25 + expansion) for modes "lexical"/"hybrid".
+    3. Score densely (cosine) for modes "dense"/"hybrid".
+    4. Fuse with RRF for "hybrid"; use raw score for "lexical"/"dense".
+    5. Return top ``limit`` hits.
+    """
+    lex_ranked, dense_ranked = score_shard_components(
+        index,
+        shard_id,
+        query_tokens=query_tokens,
+        expansion_tokens=expansion_tokens,
+        query_vector=query_vector,
+        mode=mode,
+        metadata_filter=metadata_filter,
+    )
 
     # 4. Fuse / rank.
     hits: list[ShardHit] = []
@@ -354,6 +388,102 @@ def merge_shard_results(
     ]
 
 
+def _hybrid_hits_fused_globally(
+    index: LoadedIndex,
+    target_shard_ids: list[int],
+    *,
+    query_tokens: list[str],
+    expansion_tokens: list[str],
+    query_vector: FloatArray | None,
+    metadata_filter: MetadataFilter | None,
+    rrf_config: RRFConfig,
+    limit: int,
+) -> list[ShardHit]:
+    """Hybrid hits fused once over all shards, so RRF ranks are globally comparable.
+
+    Why this is not done per shard: an RRF contribution is ``w / (k + rank)`` with
+    ranks restarting at 1 inside every shard. Fusing shard-locally therefore gives
+    the best document of an IRRELEVANT shard exactly the same score as the best
+    document of the right one — with k=60 and 8 shards, up to 8 documents tie at
+    ~0.0328 and the final order collapses to the doc_id tie-break. Measured on the
+    sample corpus before this change: 61 hits carried only 17 distinct scores.
+
+    That capped hybrid BELOW both of its own components once dense embeddings got
+    good (model2vec): hybrid Recall@5 0.5417 against dense 0.7500. Fusing globally
+    restores the invariant that a better-ranked document scores higher.
+
+    Known limitation: BM25 IDF is computed per shard, so raw lexical scores are not
+    strictly comparable across shards and the global lexical order is an
+    approximation. This is a consequence of sharding itself, and 'lexical' mode
+    already merges across shards on raw BM25 — so this makes hybrid consistent with
+    it rather than introducing a new assumption.
+    """
+    lex_all: list[tuple[str, float]] = []
+    dense_all: list[tuple[str, float]] = []
+    shard_of: dict[str, int] = {}
+
+    for sid in target_shard_ids:
+        lex_ranked, dense_ranked = score_shard_components(
+            index,
+            sid,
+            query_tokens=query_tokens,
+            expansion_tokens=expansion_tokens,
+            query_vector=query_vector,
+            mode="hybrid",
+            metadata_filter=metadata_filter,
+        )
+        lex_all.extend(lex_ranked)
+        dense_all.extend(dense_ranked)
+        for doc_id, _ in lex_ranked:
+            shard_of[doc_id] = sid
+        for doc_id, _ in dense_ranked:
+            shard_of[doc_id] = sid
+
+    # Global orders. Same (-score, doc_id) tie-break as the per-shard path, so the
+    # result stays deterministic.
+    lex_all.sort(key=lambda t: (-t[1], t[0]))
+    dense_all.sort(key=lambda t: (-t[1], t[0]))
+
+    fused = rrf_fuse(
+        [
+            RankedList(
+                name="lexical",
+                weight=rrf_config.lexical_weight,
+                ids=tuple(doc_id for doc_id, _ in lex_all),
+                scores=tuple(score for _, score in lex_all),
+            ),
+            RankedList(
+                name="dense",
+                weight=rrf_config.dense_weight,
+                ids=tuple(doc_id for doc_id, _ in dense_all),
+                scores=tuple(score for _, score in dense_all),
+            ),
+        ],
+        k=rrf_config.k,
+    )
+
+    lex_rank_map = {doc_id: (r + 1, score) for r, (doc_id, score) in enumerate(lex_all)}
+    dense_rank_map = {doc_id: (r + 1, score) for r, (doc_id, score) in enumerate(dense_all)}
+
+    hits: list[ShardHit] = []
+    for item in fused[:limit]:
+        b_rank, b_score = lex_rank_map.get(item.id, (None, None))
+        d_rank, d_score = dense_rank_map.get(item.id, (None, None))
+        hits.append(
+            ShardHit(
+                doc_id=item.id,
+                shard_id=shard_of[item.id],
+                bm25_score=b_score,
+                bm25_rank=b_rank,
+                dense_score=d_score,
+                dense_rank=d_rank,
+                fused_score=item.score,
+                rrf_contributions=dict(item.contributions),
+            )
+        )
+    return hits
+
+
 # ------------------------------------------------------------------ #
 # Top-level retrieve                                                  #
 # ------------------------------------------------------------------ #
@@ -398,21 +528,33 @@ def retrieve(
 
     # Search each shard.
     shard_hits: list[ShardHit] = []
-    for sid in target_shard_ids:
-        hits = search_shard(
+    if mode == "hybrid":
+        shard_hits = _hybrid_hits_fused_globally(
             index,
-            sid,
+            target_shard_ids,
             query_tokens=query_tokens,
             expansion_tokens=expansion_tokens,
             query_vector=query_vector,
-            mode=mode,
             metadata_filter=metadata_filter,
-            rrf_k=rrf_config.k,
-            lexical_weight=rrf_config.lexical_weight,
-            dense_weight=rrf_config.dense_weight,
+            rrf_config=rrf_config,
             limit=limit,
         )
-        shard_hits.extend(hits)
+    else:
+        for sid in target_shard_ids:
+            hits = search_shard(
+                index,
+                sid,
+                query_tokens=query_tokens,
+                expansion_tokens=expansion_tokens,
+                query_vector=query_vector,
+                mode=mode,
+                metadata_filter=metadata_filter,
+                rrf_k=rrf_config.k,
+                lexical_weight=rrf_config.lexical_weight,
+                dense_weight=rrf_config.dense_weight,
+                limit=limit,
+            )
+            shard_hits.extend(hits)
 
     # Use a single variant (the question or explicit query_variant label).
     variant_label = query_variant or question
