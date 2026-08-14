@@ -3,7 +3,7 @@
   "checkpoint_id": "63cf92b8d1b2",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 3,
+  "checkpoints_count": 4,
   "files_touched": [
     ".env.example",
     "Makefile",
@@ -23,6 +23,13 @@
       "compact_transcript": "/63/cf92b8d1b2/0/transcript.jsonl",
       "content_hash": "/63/cf92b8d1b2/0/content_hash.txt",
       "prompt": "/63/cf92b8d1b2/0/prompt.txt"
+    },
+    {
+      "metadata": "/63/cf92b8d1b2/1/metadata.json",
+      "transcript": "/63/cf92b8d1b2/1/full.jsonl",
+      "compact_transcript": "/63/cf92b8d1b2/1/transcript.jsonl",
+      "content_hash": "/63/cf92b8d1b2/1/content_hash.txt",
+      "prompt": "/63/cf92b8d1b2/1/prompt.txt"
     }
   ],
   "token_usage": {
