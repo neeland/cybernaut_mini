@@ -70,9 +70,9 @@ def create_pipeline() -> Pipeline:
 
     DAG shape::
 
-        raw_ccnews_source  → snapshot_raw_ccnews  → normalize_ccnews  ─┐
-                                                                         ├─ merge_documents → select_documents → documents
-        raw_miracl_source  → snapshot_raw_miracl  → normalize_miracl  ─┘
+        raw_ccnews_source → snapshot_raw_ccnews → normalize_ccnews ─┐
+                                                                      ├─ merge → select → documents
+        raw_miracl_source → snapshot_raw_miracl → normalize_miracl ─┘
 
     Why two branches:
         CC-News provides the bulk English corpus (~190k rows after language

@@ -27,6 +27,31 @@ raw_corpus:
   type: cybernaut_mini.datasets.JsonlDataset
   filepath: data/01_raw/corpus_snapshot.jsonl
 
+# ── CC-News source branch ───────────────────────────────────────────────────
+# Base env: local JSONL file so offline runs and tests never touch the network.
+# Prod env (conf/prod/catalog.yml) overrides with HuggingFaceDataset
+# (streaming=True, filter_equals: {language: en}).
+raw_ccnews_source:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/01_raw/ccnews_source.jsonl
+
+raw_ccnews:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/01_raw/ccnews_snapshot.jsonl
+
+# ── MIRACL corpus source branch ─────────────────────────────────────────────
+# Base env: local JSONL file fallback.
+# Prod env overrides with HfFileDataset (JSONL.gz via HfFileSystem, pinned SHA).
+# NOTE: this is the MIRACL *corpus* (passages), distinct from the MIRACL *qrels*
+# source (`miracl_en_dev_source`) used by the judgment pipeline.
+raw_miracl_source:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/01_raw/miracl_source.jsonl
+
+raw_miracl:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/01_raw/miracl_snapshot.jsonl
+
 # ------------------------------------------------------------------ #
 # 02_intermediate — normalised to the Document schema                 #
 # ------------------------------------------------------------------ #
@@ -34,6 +59,20 @@ raw_corpus:
 normalized_documents:
   type: cybernaut_mini.datasets.JsonlDataset
   filepath: data/02_intermediate/documents.jsonl
+
+normalized_ccnews:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/02_intermediate/ccnews_documents.jsonl
+
+normalized_miracl:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/02_intermediate/miracl_documents.jsonl
+
+# merge_documents output: CC-News + MIRACL passages combined, before select_documents
+# applies the language filter and max_documents cap.
+merged_documents:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/02_intermediate/merged_documents.jsonl
 
 # ------------------------------------------------------------------ #
 # 03_primary — the build-ready corpus                                 #

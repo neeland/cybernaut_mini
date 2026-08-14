@@ -72,6 +72,39 @@ corpus:
   id_prefix: doc
   min_text_chars: 32
 
+# CorpusSourceConfig for the CC-News branch (stanford-oval/ccnews).
+# Discovery SHA: d733e654c9a506df519e1a166a86c118c7657ce4 (pinned in prod catalog).
+# id_prefix "ccn" prevents id collisions with MIRACL's "mir" prefix.
+# language filter (filter_equals: {language: en}) applied BEFORE islice in the
+# HuggingFaceDataset loader so max_rows counts English rows only.
+corpus_ccnews:
+  field_map:
+    plain_text: text
+    requested_url: url
+    title: title
+    language: language
+    published_date: published_at
+  metadata_fields: [publisher, sitename, author]
+  id_prefix: ccn
+  default_language: en
+  min_text_chars: 32
+
+# CorpusSourceConfig for the MIRACL corpus branch (miracl/miracl-corpus).
+# Discovery SHA: d921ec7e349ce0d28daf30b2da9da5ee698bef0d (pinned in prod catalog).
+# id_prefix "mir" is disjoint from CC-News "ccn" prefix.
+# docid (format: "{page_id}#{passage_index}") is preserved in metadata for
+# qrel-to-document lookup debugging and drives the stable Document.id via
+# make_document_id("mir", docid).
+corpus_miracl:
+  field_map:
+    text: text
+    title: title
+    docid: url
+  metadata_fields: [docid]
+  id_prefix: mir
+  default_language: en
+  min_text_chars: 32
+
 # Narrowing applied between the intermediate and primary layers.
 corpus_selection:
   languages: null
