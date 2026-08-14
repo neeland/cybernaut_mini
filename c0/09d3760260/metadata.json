@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "c009d3760260",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "src/cybernaut_mini/datasets.py",
+    "tests/test_datasets.py"
+  ],
+  "sessions": [
+    {
+      "metadata": "/c0/09d3760260/0/metadata.json",
+      "transcript": "/c0/09d3760260/0/full.jsonl",
+      "compact_transcript": "/c0/09d3760260/0/transcript.jsonl",
+      "content_hash": "/c0/09d3760260/0/content_hash.txt",
+      "prompt": "/c0/09d3760260/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1346,
+    "cache_creation_tokens": 295088,
+    "cache_read_tokens": 4887108,
+    "output_tokens": 26223,
+    "api_call_count": 59
+  }
+}

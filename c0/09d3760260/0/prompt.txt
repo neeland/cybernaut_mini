@@ -1,0 +1,7 @@
+<task-notification>
+<task-id>b7evp5kku</task-id>
+<tool-use-id>toolu_01Mmc48UYbtP9QqNbnAmmUHr</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-neelanpather-dev-cybernaut-mini/884951e4-8b6a-4ee7-9bad-51f8e67e4559/tasks/b7evp5kku.output</output-file>
+<status>completed</status>
+<summary>Background command "Run full test suite (except notebooks) for regressions" completed (exit code 0)</summary>
+</task-notification>
