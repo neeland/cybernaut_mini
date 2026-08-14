@@ -1,0 +1,7 @@
+"Honesty note, from the README itself:
+  "Staged beam search with UCT budget allocation (honestly not full
+  MCTS)." There is no rollout and no backpropagation to a root value.
+
+  Judge and generator are heuristic — token coverage and Jaccard.
+  Zero LLM calls on the default path. Reward maxes at 0.95 by
+  construction (0.45+0.20+0.20+0.10−0.05); 1.0 is unreachable." this sounds too toy. let's make it more like real nossible. let's use the mps here and some huggingface models
