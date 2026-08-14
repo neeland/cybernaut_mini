@@ -54,9 +54,16 @@ def evaluate_node(
     agent_params: dict[str, Any],
     seed: int,
     offline: bool,
+    shard_beam_n: int = 100,
     modes: list[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Run all four retrieval modes over judgments and return metrics dicts."""
+    """Run all four retrieval modes over judgments and return metrics dicts.
+
+    ``shard_beam_n`` controls how many shards the router may select per query
+    when computing ``shard_recall@N`` for static modes (lexical/dense/hybrid).
+    Defaults to 100, matching ``DEFAULT_CANDIDATE_DEPTH`` in
+    ``query.s5_select`` — the width the system actually runs with.
+    """
     from cybernaut_mini.config import AgentConfig, AppConfig, EmbeddingConfig, RRFConfig
     from cybernaut_mini.evals import evaluate
     from cybernaut_mini.models import Judgment
@@ -87,12 +94,18 @@ def evaluate_node(
         processor=processor,
         provider=provider,
         modes=eval_modes,
+        shard_beam_n=shard_beam_n,
     )
     return [m.as_dict() for m in metrics]
 
 
 def report_node(metrics_list: list[dict[str, Any]]) -> dict[str, Any]:
-    """Summarise metrics into a human-readable report dict."""
+    """Summarise metrics into a human-readable report dict.
+
+    ``shard_recall_at_n`` is reported per mode. Static modes (lexical/dense/
+    hybrid) measure *router quality*; agent mode measures *exploration coverage*.
+    Do not average or compare the two — see :func:`cybernaut_mini.evals.evaluate`.
+    """
     return {
         "metrics": metrics_list,
         "n_modes": len(metrics_list),
@@ -104,4 +117,7 @@ def report_node(metrics_list: list[dict[str, Any]]) -> dict[str, Any]:
         )
         if metrics_list
         else None,
+        "shard_recall_by_mode": {
+            m["mode"]: m["shard_recall_at_n"] for m in metrics_list
+        },
     }

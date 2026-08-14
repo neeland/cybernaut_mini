@@ -52,6 +52,11 @@ agent:
   judge: heuristic
   query_generator: heuristic
 
+# How many shards the router is allowed to select per query when computing
+# shard_recall@N. Matches DEFAULT_CANDIDATE_DEPTH in query.s5_select (100)
+# so the metric measures the width the system actually runs with.
+shard_beam_n: 100
+
 # ------------------------------------------------------------------ #
 # corpus_ingest                                                       #
 # ------------------------------------------------------------------ #

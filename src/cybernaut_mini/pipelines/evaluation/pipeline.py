@@ -31,6 +31,7 @@ def create_pipeline() -> Pipeline:
                     "params:agent",
                     "params:seed",
                     "params:offline",
+                    "params:shard_beam_n",
                 ],
                 outputs="metrics_list",
                 name="evaluate_node",
