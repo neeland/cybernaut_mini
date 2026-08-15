@@ -902,8 +902,8 @@ def write_index(
         # ── Parallel pass: build bloom/zstd/vocab concurrently ───────────────
         # zstandard dictionary training and BLAKE2b hashing both release the
         # GIL, so threads achieve true concurrency here without forking. At
-        # 256 shards × ~780 docs/shard this cuts artifact build time by
-        # ~cpu_count on a warm machine (measured: 8-core M3 Pro: 38s → 6s).
+        # 256 shards x ~780 docs/shard this cuts artifact build time by
+        # ~cpu_count on a warm machine (measured: 8-core M3 Pro: 38s -> 6s).
         if build_artifacts and _artifact_inputs:
             from concurrent.futures import ThreadPoolExecutor
 

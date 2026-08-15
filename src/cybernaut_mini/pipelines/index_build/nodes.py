@@ -130,10 +130,10 @@ def _embed_with_cache(
 
     existing: dict[str, int] = {}
     if manifest_path.exists():
-        try:
+        import contextlib
+
+        with contextlib.suppress(Exception):
             existing = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except Exception:
-            pass  # corrupt manifest — treat all chunks as missing
 
     n_chunks = max(1, (len(texts) + chunk_size - 1) // chunk_size)
     all_vecs: list[np.ndarray] = []
@@ -170,7 +170,8 @@ def _embed_with_cache(
     tmp_m.write_text(json.dumps(manifest), encoding="utf-8")
     tmp_m.replace(manifest_path)
 
-    return np.concatenate(all_vecs, axis=0).tolist()
+    result: list[list[float]] = np.concatenate(all_vecs, axis=0).tolist()
+    return result
 
 
 def ingest_documents(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -223,7 +224,7 @@ def embed_documents(
 
     Logs the resolved device and emits a warning when a sentence-transformers
     build silently falls back to CPU on Apple Silicon (MPS available but not
-    selected) — the most common cause of a 10-20× throughput regression that
+    selected) — the most common cause of a 10-20x throughput regression that
     otherwise appears only in wall-clock time after a full build.
     """
     import logging
@@ -246,7 +247,7 @@ def embed_documents(
             _log.warning(
                 "ST embedder resolved to CPU on Apple Silicon — MPS is available. "
                 "Run via scripts/with-accel.sh or set PYTORCH_ENABLE_MPS_FALLBACK=1 "
-                "to activate it. Expect ~10-20× slower embedding than MPS."
+                "to activate it. Expect ~10-20x slower embedding than MPS."
             )
 
     texts = []

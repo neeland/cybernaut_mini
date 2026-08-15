@@ -70,9 +70,9 @@ def shard_documents(
         msg = f"n_shards ({n_shards}) > n_docs ({n_docs})"
         raise ValueError(msg)
 
-    # batch_size=1024 is the sklearn default and 2× faster than 256 at 200k×384
-    # (5.4 s → 2.7 s on Apple M-series; see .omc/research/kedro-optimisation.md).
-    # The sklearn recommendation is batch_size ≥ n_clusters × 3 (768 at 256 shards),
+    # batch_size=1024 is the sklearn default and 2x faster than 256 at 200k x 384
+    # (5.4 s -> 2.7 s on Apple M-series; see .omc/research/kedro-optimisation.md).
+    # The sklearn recommendation is batch_size >= n_clusters x 3 (768 at 256 shards),
     # so 256 was also below the convergence-quality floor — 1024 fixes both.
     kmeans = MiniBatchKMeans(
         n_clusters=n_shards,
