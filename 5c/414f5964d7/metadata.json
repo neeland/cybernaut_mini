@@ -1,0 +1,48 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "5c414f5964d7",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 5,
+  "files_touched": [
+    ".devcontainer/post-create.sh",
+    ".gitignore",
+    "Makefile",
+    "README.md",
+    "conf/base/catalog.yml",
+    "data/00_reference/the-road-to-cybernaut-1.build-guide.md",
+    "data/01_raw/fixtures/documents.jsonl",
+    "data/01_raw/fixtures/judgments.jsonl",
+    "data/ATTRIBUTION.md",
+    "data/LICENSE-DATA",
+    "docs/REVERSE_ENGINEERING_GUIDE.md",
+    "notebooks/00_nosible_api_reference.ipynb",
+    "notebooks/02_shard_anatomy.ipynb",
+    "notebooks/03_retrieval_evaluation.ipynb",
+    "notebooks/README.md",
+    "scripts/preso.sh",
+    "scripts/pull_fixture_slice.py",
+    "scripts/setup_mac.sh",
+    "src/cybernaut_mini/datasets.py",
+    "src/cybernaut_mini/notebook.py",
+    "tests/test_datasets.py",
+    "tests/test_notebooks.py",
+    "tools/docs_check.py"
+  ],
+  "sessions": [
+    {
+      "metadata": "/5c/414f5964d7/0/metadata.json",
+      "transcript": "/5c/414f5964d7/0/full.jsonl",
+      "compact_transcript": "/5c/414f5964d7/0/transcript.jsonl",
+      "content_hash": "/5c/414f5964d7/0/content_hash.txt",
+      "prompt": "/5c/414f5964d7/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1815,
+    "cache_creation_tokens": 1438190,
+    "cache_read_tokens": 28116836,
+    "output_tokens": 205344,
+    "api_call_count": 291
+  }
+}
