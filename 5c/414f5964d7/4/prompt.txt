@@ -1,0 +1,27 @@
+<task-notification>
+<task-id>bxgn84o1g</task-id>
+<tool-use-id>toolu_018WhyXVw76sSXVYpssr3DSr</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-neelanpather-dev-cybernaut-mini/e9ca709c-178d-4ce0-a66a-b39f9e2e3050/tasks/bxgn84o1g.output</output-file>
+<status>completed</status>
+<summary>Background command "Inspect CC-News schema via streaming" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>b1e55dt2p</task-id>
+<tool-use-id>toolu_01JsjMwEoGphsE4xxyBZrxSr</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-neelanpather-dev-cybernaut-mini/e9ca709c-178d-4ce0-a66a-b39f9e2e3050/tasks/b1e55dt2p.output</output-file>
+<status>completed</status>
+<summary>Background command "Inspect CC-News schema without trust_remote_code" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bq0aeb3px</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-neelanpather-dev-cybernaut-mini/e9ca709c-178d-4ce0-a66a-b39f9e2e3050/tasks/bq0aeb3px.output</output-file>
+<status>completed</status>
+<summary>Background command "Get CC-News column schema from first streaming row" completed (exit code 0)</summary>
+</task-notification>
