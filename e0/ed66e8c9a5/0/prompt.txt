@@ -1,0 +1,31 @@
+INFO     Loading data from raw_miracl_source (HfFileDataset)...   take a very long time and have no indicative logging. can we change this?
+
+---
+
+<task-notification>
+<task-id>bnnl54sql</task-id>
+<tool-use-id>toolu_01PMmFPj7DkT6ouRcVHAWt7c</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-neelanpather-dev-cybernaut-mini/ce5a4b73-d556-4e5a-9d0b-f1d52b19d69a/tasks/bnnl54sql.output</output-file>
+<status>completed</status>
+<summary>Background command "Lint, type-check, and run full test suite" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>boapqmoss</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-neelanpather-dev-cybernaut-mini/ce5a4b73-d556-4e5a-9d0b-f1d52b19d69a/tasks/boapqmoss.output</output-file>
+<status>completed</status>
+<summary>Background command "Lint test file and run full test suite" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bh0ijpxdq</task-id>
+<tool-use-id>toolu_01Wt21os73C2NZ69qkNBA27y</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-neelanpather-dev-cybernaut-mini/ce5a4b73-d556-4e5a-9d0b-f1d52b19d69a/tasks/bh0ijpxdq.output</output-file>
+<status>completed</status>
+<summary>Background command "Lint, type-check, and run full test suite with real exit code" completed (exit code 0)</summary>
+</task-notification>
