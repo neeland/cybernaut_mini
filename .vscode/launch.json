@@ -39,6 +39,139 @@
     }
   ],
   "configurations": [
+    // ── Four canonical configs (task #13) ─────────────────────────────────────
+    // Each carries the accel env block that replicates scripts/with-accel.sh.
+    // Source of truth for the values: accel.tuning_env() on arm64
+    // (src/cybernaut_mini/accel.py).  The debugger cannot exec the wrapper
+    // script, so the arm64 defaults are inlined here; they are safe no-ops on
+    // x86 / Linux CI.
+    {
+      // Full production build: corpus_ingest (ThreadRunner for the parallel
+      // ccnews + MIRACL branches) → index_build → evaluation.
+      // Requires `uv sync --extra hf --extra st` and network access.
+      // HF_TOKEN is not required for these public datasets.
+      "name": "kedro: production (prod env)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "kedro",
+      "args": [
+        "run",
+        "--pipeline",
+        "production",
+        "--env",
+        "prod",
+        "--runner",
+        "ThreadRunner"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": false,
+      "env": {
+        // replicates scripts/with-accel.sh; source of truth: accel.tuning_env() on arm64
+        "VECLIB_MAXIMUM_THREADS": "4",
+        "OMP_NUM_THREADS": "4",
+        "PYTORCH_ENABLE_MPS_FALLBACK": "1",
+        "TOKENIZERS_PARALLELISM": "false"
+      }
+    },
+    {
+      // Calibration run: same as production but with a small max_rows override
+      // so corpus_ingest pulls ~1 000 CC-News rows instead of 193 000.
+      // REQUIRES conf/prod/catalog.yml raw_ccnews_source.max_rows to use
+      // ${runtime_params:max_rows,193000} — worker-1's uncommitted catalog.yml
+      // change wires this up.  Adjust 1000 to taste for faster iteration.
+      "name": "kedro: production calibration (max_rows override via --params)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "kedro",
+      "args": [
+        "run",
+        "--pipeline",
+        "production",
+        "--env",
+        "prod",
+        "--runner",
+        "ThreadRunner",
+        "--params",
+        "max_rows=1000"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": false,
+      "env": {
+        // replicates scripts/with-accel.sh; source of truth: accel.tuning_env() on arm64
+        "VECLIB_MAXIMUM_THREADS": "4",
+        "OMP_NUM_THREADS": "4",
+        "PYTORCH_ENABLE_MPS_FALLBACK": "1",
+        "TOKENIZERS_PARALLELISM": "false"
+      }
+    },
+    {
+      // Run evaluation against the prod-env index + judgments.
+      // Assumes the index at artifacts/ccnews-miracl-200k is already built.
+      "name": "kedro: evaluation (prod env)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "kedro",
+      "args": [
+        "run",
+        "--pipeline",
+        "evaluation",
+        "--env",
+        "prod"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": false,
+      "env": {
+        // replicates scripts/with-accel.sh; source of truth: accel.tuning_env() on arm64
+        "VECLIB_MAXIMUM_THREADS": "4",
+        "OMP_NUM_THREADS": "4",
+        "PYTORCH_ENABLE_MPS_FALLBACK": "1",
+        "TOKENIZERS_PARALLELISM": "false"
+      }
+    },
+    {
+      // index_build over the 460-doc committed fixture corpus (offline).
+      // Fast enough to reach embed_documents (nodes.py:214) in < 2 s.
+      // Delete artifacts/fixture/_VALID first to force a full rebuild so
+      // the breakpoint fires (otherwise Kedro skips already-built shards).
+      //
+      // CLI smoke-test (2026-08-15):
+      //   python -m debugpy --listen 127.0.0.1:5678 --wait-for-client \
+      //     -m kedro run --pipeline index_build --params "<params below>"
+      // → debugpy accepted DAP initialize + attach on :5678; direct run
+      //   without debugpy confirmed "Running node: embed_documents" at
+      //   nodes.py:214 (log: embedder=hash-256 dim=256).  Full halt at the
+      //   breakpoint is achieved via VS Code attach (pydevdAuthorize token
+      //   is exchanged automatically by the Python Debugger extension).
+      "name": "kedro: fixture build (fast debug)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "kedro",
+      "args": [
+        "run",
+        "--pipeline",
+        "index_build",
+        "--params",
+        "input_path=data/01_raw/fixtures/documents.jsonl,index_path=artifacts/fixture,judgments_path=data/01_raw/fixtures/judgments.jsonl,embedding.provider=hash,embedding.dim=256,index.n_shards=8,offline=true"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "justMyCode": false,
+      "env": {
+        // replicates scripts/with-accel.sh; source of truth: accel.tuning_env() on arm64
+        "VECLIB_MAXIMUM_THREADS": "4",
+        "OMP_NUM_THREADS": "4",
+        "PYTORCH_ENABLE_MPS_FALLBACK": "1",
+        "TOKENIZERS_PARALLELISM": "false"
+      }
+    },
+    // ── Pre-existing configs (unchanged) ──────────────────────────────────────
     {
       "name": "kedro run: corpus_ingest (raw -> intermediate -> primary)",
       "type": "debugpy",
