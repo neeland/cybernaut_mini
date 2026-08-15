@@ -28,7 +28,8 @@ raw_ccnews_source:
     language: en
   # 193k rows ≈ 200k target minus the ~7,921 mandatory MIRACL passages, with
   # headroom for rows dropped by the min_text_chars filter in normalize_rows.
-  max_rows: 193000
+  # runtime_params allows --params max_rows=N to override for calibration runs.
+  max_rows: ${runtime_params:max_rows,193000}
 
 raw_ccnews:
   type: cybernaut_mini.datasets.JsonlDataset
