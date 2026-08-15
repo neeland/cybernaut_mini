@@ -1,0 +1,428 @@
+i just built the devcontainer and it doesn't have claude; the devcontainer should build with claude and omc ;;; include any helpful scripts in ./scripts folder in root
+
+---
+
+trim it
+
+---
+
+the container doesn't build
+
+---
+
+<task-notification>
+<task-id>b0624cxvv</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-neelanpather-dev-cybernaut-mini/fe85e871-867f-418d-ab44-4730999345ce/tasks/b0624cxvv.output</output-file>
+<status>completed</status>
+<summary>Background command "Quit Docker Desktop, force-kill backend if it hangs" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>b6r6p98tk</task-id>
+<tool-use-id>toolu_011AMR1AAsGenR9hZvHiC9AB</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-neelanpather-dev-cybernaut-mini/fe85e871-867f-418d-ab44-4730999345ce/tasks/b6r6p98tk.output</output-file>
+<status>failed</status>
+<summary>Background command "Relaunch Docker Desktop and wait until daemon responds" failed with exit code 1</summary>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>b66c8ew4h</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-neelanpather-dev-cybernaut-mini/fe85e871-867f-418d-ab44-4730999345ce/tasks/b66c8ew4h.output</output-file>
+<status>failed</status>
+<summary>Background command "Relaunch Docker Desktop fresh and wait for daemon" failed with exit code 1</summary>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bobmmr1j4</task-id>
+<summary>Monitor event: "Docker Desktop startup: backend log errors/success markers"</summary>
+<event>[Monitor timed out — re-arm if needed.]</event>
+</task-notification>
+
+---
+
+i tried to set up things properly on this mac not sure if it worked
+
+---
+
+<task-notification>
+<task-id>bul4152wn</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-neelanpather-dev-cybernaut-mini/cbed7cc0-b563-4835-8207-878b29c970f9/tasks/bul4152wn.output</output-file>
+<status>completed</status>
+<summary>Background command "Install omc CLI globally on the host Mac" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+bash scripts/with-accel.sh make test
+uv run pytest
+........................................................................................................................................................ [ 16%]
+........................................................................................................................................................ [ 32%]
+.................................EEE.....EEEEEEE..............................................EEEEEEEEEEE..E............................................ [ 48%]
+........................................................................................................................................................ [ 65%]
+........................................................................................................................................................ [ 81%]
+........................................................................................................................................................ [ 97%]
+.....................                                                                                                                                                                   [100%]
+=========================================================================================== ERRORS ============================================================================================
+_____________________________________________________________________ ERROR at setup of test_english_question_detects_en ______________________________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+_____________________________________________________________________ ERROR at setup of test_japanese_question_detects_ja _____________________________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+___________________________________________________________________ ERROR at setup of test_newlines_do_not_crash_detection ____________________________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+___________________________________________________________ ERROR at setup of test_very_short_text_is_detected_not_rejected[hi-ca] ____________________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+__________________________________________________________ ERROR at setup of test_very_short_text_is_detected_not_rejected[3.14-no] ___________________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+___________________________________________________________ ERROR at setup of test_very_short_text_is_detected_not_rejected[ok-en] ____________________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+______________________________________________________ ERROR at setup of test_very_short_text_is_detected_not_rejected[\u7d30\u83cc-zh] _______________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+___________________________________________________ ERROR at setup of test_very_short_text_is_detected_not_rejected[https://example.com-en] ___________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+________________________________________________________________ ERROR at setup of test_mixed_script_text_returns_one_language ________________________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+______________________________________________________________________ ERROR at setup of test_detection_is_deterministic ______________________________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+_____________________________________________________________ ERROR at setup of test_english_question_passes_through_untranslated _____________________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+_______________________________________________________________ ERROR at setup of test_english_question_translated_to_japanese ________________________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+___________________________________________________________ ERROR at setup of test_same_language_target_never_calls_the_translator ____________________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+_______________________________________________________________ ERROR at setup of test_target_language_tags_are_normalised[EN] ________________________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+______________________________________________________________ ERROR at setup of test_target_language_tags_are_normalised[en-US] ______________________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+______________________________________________________________ ERROR at setup of test_target_language_tags_are_normalised[en_GB] ______________________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+______________________________________________________________ ERROR at setup of test_target_language_tags_are_normalised[ en ] _______________________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+_____________________________________________________________ ERROR at setup of test_no_translator_degrades_to_the_original_text ______________________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+_______________________________________________________________ ERROR at setup of test_null_translator_leaves_translated_false ________________________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+____________________________________________________________ ERROR at setup of test_missing_key_surfaces_through_prepare_question _____________________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+___________________________________________________________________ ERROR at setup of test_japanese_question_prepares_as_ja ___________________________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+__________________________________________________________________ ERROR at setup of test_prepare_question_is_deterministic ___________________________________________________________________
+fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and will not be skipped silently: warm the cache once with: uv run python -c "from ftlangdetect import detect; print(detect('hello world'))". On a machine that genuinely cannot download it, set CYBERNAUT_MINI_ALLOW_MISSING_FASTTEXT=1 to skip these tests deliberately.
+====================================================================================== warnings summary =======================================================================================
+.venv/lib/python3.12/site-packages/pysbd/segmenter.py:66
+  /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/pysbd/segmenter.py:66: SyntaxWarning: invalid escape sequence '\s'
+    for match in re.finditer('{0}\s*'.format(re.escape(sent)), self.original_text):
+
+.venv/lib/python3.12/site-packages/pysbd/lang/arabic.py:29
+  /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/pysbd/lang/arabic.py:29: SyntaxWarning: invalid escape sequence '\.'
+    txt = re.sub('(?<={0})\.'.format(am), '∯', txt)
+
+.venv/lib/python3.12/site-packages/pysbd/lang/persian.py:29
+  /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/pysbd/lang/persian.py:29: SyntaxWarning: invalid escape sequence '\.'
+    txt = re.sub('(?<={0})\.'.format(am), '∯', txt)
+
+tests/test_s2_tokenize.py::test_acronym_exemption_does_not_disturb_non_latin_scripts
+  /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/jieba/__init__.py:44: SyntaxWarning: invalid escape sequence '\.'
+    re_han_default = re.compile("([\u4E00-\u9FD5a-zA-Z0-9+#&\._%\-]+)", re.U)
+
+tests/test_s2_tokenize.py::test_acronym_exemption_does_not_disturb_non_latin_scripts
+  /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/jieba/__init__.py:46: SyntaxWarning: invalid escape sequence '\s'
+    re_skip_default = re.compile("(\r\n|\s)", re.U)
+
+tests/test_s2_tokenize.py::test_acronym_exemption_does_not_disturb_non_latin_scripts
+  /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/jieba/finalseg/__init__.py:78: SyntaxWarning: invalid escape sequence '\.'
+    re_skip = re.compile("([a-zA-Z0-9]+(?:\.\d+)?%?)")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=================================================================================== short test summary info ===================================================================================
+ERROR tests/test_s1_language.py::test_english_question_detects_en - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_japanese_question_detects_ja - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_newlines_do_not_crash_detection - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_very_short_text_is_detected_not_rejected[hi-ca] - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_very_short_text_is_detected_not_rejected[3.14-no] - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_very_short_text_is_detected_not_rejected[ok-en] - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_very_short_text_is_detected_not_rejected[\u7d30\u83cc-zh] - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_very_short_text_is_detected_not_rejected[https://example.com-en] - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_mixed_script_text_returns_one_language - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_detection_is_deterministic - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_english_question_passes_through_untranslated - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_english_question_translated_to_japanese - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_same_language_target_never_calls_the_translator - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_target_language_tags_are_normalised[EN] - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_target_language_tags_are_normalised[en-US] - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_target_language_tags_are_normalised[en_GB] - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_target_language_tags_are_normalised[ en ] - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_no_translator_degrades_to_the_original_text - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_null_translator_leaves_translated_false - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_missing_key_surfaces_through_prepare_question - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_japanese_question_prepares_as_ja - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+ERROR tests/test_s1_language.py::test_prepare_question_is_deterministic - Failed: fastText lid.176.bin is not cached at /var/folders/qx/48cwg1gs0bdg8rqyk7p_9hlr0000gn/T/fasttext-langdetect/lid.176.bin. The stage 1 worked-example tests cannot run without it and...
+911 passed, 6 warnings, 22 errors in 79.57s (0:01:19)
+
+---
+
+okay now that that is set up let's continue development /plan
+
+---
+
+still working?
+
+---
+
+please ensure kedro is ultra optimised before we kick off so update run and plans accordingly
+
+---
+
+ensure the kero run can be done via the vscode debugger and ensure that if the run breaks it picks up where it left on rerun
+
+---
+
+<task-notification>
+<task-id>bdxdhxcct</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-neelanpather-dev-cybernaut-mini/cbed7cc0-b563-4835-8207-878b29c970f9/tasks/bdxdhxcct.output</output-file>
+<status>completed</status>
+<summary>Background command "Run notebook tests to resolve the status contradiction" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+still working?
+
+---
+
+check now. i freed up space
+
+---
+
+eta
+
+---
+
+i'd prefer to run it myself cancel and give me command
+
+---
+
+atasetError: judgments: /Users/neelanpather/dev/cybernaut_mini/data/03_primary/miracl_en_dev_judgments.jsonl does not exist.
+  If it is a pipeline output, produce it first: `kedro run --pipeline corpus_ingest` (see conf/base/catalog.yml).
+  If you meant an existing corpus, point at it: `--params input_path=data/01_raw/fixtures/documents.jsonl` (CLI: `--input data/01_raw/fixtures/documents.jsonl`).
+
+---
+
+seems to be hanging ❯ scripts/with-accel.sh uv run kedro run --env prod --pipeline corpus_ingest --from-nodes=snapshot_raw_miracl
+
+[08/15/26 15:41:58] INFO     Using '/Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/kedro/framework/project/rich_logging.yml' as logging              __init__.py:302
+                             configuration.                                                                                                                                                    
+[08/15/26 15:41:58] WARNING  /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/kedro/framework/cli/project.py:270: KedroDeprecationWarning: Option      warnings.py:112
+                             '--pipeline' is deprecated and will be removed in a future release. Please use '--pipelines' instead.                                                             
+                               warnings.warn(                                                                                                                                                  
+                                                                                                                                                                                               
+                    INFO     Kedro project cybernaut_mini                                                                                                                        session.py:327
+[08/15/26 15:41:59] WARNING  Could not extract type hints from function evaluate_node: name 'LoadedIndex' is not defined                                                  type_extractor.py:107
+                    INFO     No typed parameter requirements found, returning original parameters                                                                    parameter_validator.py:124
+                    INFO     No typed parameter requirements found, returning original parameters                                                                    parameter_validator.py:124
+                    INFO     Using synchronous mode for loading and saving data. Use the --async flag for potential performance gains.                                  sequential_runner.py:59
+                             https://docs.kedro.org/en/stable/build/run_a_pipeline/#load-and-save-asynchronously                                                                               
+                    INFO     Loading data from raw_miracl_source (HfFileDataset)...                                                                                        data_catalog.py:1050
+
+---
+
+❯ scripts/with-accel.sh uv run kedro run --env prod --pipeline index_build
+[08/15/26 16:43:15] INFO     Using '/Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/kedro/framework/project/rich_logging.yml' as logging configuration.                                    __init__.py:302
+[08/15/26 16:43:15] WARNING  /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/kedro/framework/cli/project.py:270: KedroDeprecationWarning: Option '--pipeline' is deprecated and will be    warnings.py:112
+                             removed in a future release. Please use '--pipelines' instead.                                                                                                                                         
+                               warnings.warn(                                                                                                                                                                                       
+                                                                                                                                                                                                                                    
+[08/15/26 16:43:16] INFO     Kedro project cybernaut_mini                                                                                                                                                             session.py:327
+                    WARNING  Could not extract type hints from function evaluate_node: name 'LoadedIndex' is not defined                                                                                       type_extractor.py:107
+                    INFO     No typed parameter requirements found, returning original parameters                                                                                                         parameter_validator.py:124
+                    INFO     No typed parameter requirements found, returning original parameters                                                                                                         parameter_validator.py:124
+[08/15/26 16:43:17] INFO     Using synchronous mode for loading and saving data. Use the --async flag for potential performance gains.                                                                       sequential_runner.py:59
+                             https://docs.kedro.org/en/stable/build/run_a_pipeline/#load-and-save-asynchronously                                                                                                                    
+                    INFO     Loading data from documents (JsonlDataset)...                                                                                                                                      data_catalog.py:1050
+                    WARNING  No nodes ran. Repeat the previous command to attempt a new run.                                                                                                                           runner.py:335
+╭─────────────────────────────── Traceback (most recent call last) ────────────────────────────────╮
+│ /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/kedro/io/data_catalog. │
+│ py:1058 in load                                                                                  │
+│                                                                                                  │
+│   1055 │   │   )                                                                                 │
+│   1056 │   │                                                                                     │
+│   1057 │   │   try:                                                                              │
+│ ❱ 1058 │   │   │   return dataset.load()                                                         │
+│   1059 │   │   except DatasetError as e:                                                         │
+│   1060 │   │   │   raise DatasetError(f"{ds_name}: {e}") from e                                  │
+│   1061                                                                                           │
+│                                                                                                  │
+│ /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/kedro/io/core.py:281   │
+│ in load                                                                                          │
+│                                                                                                  │
+│    278 │   │   │   self._logger.debug("Loading %s", str(self))                                   │
+│    279 │   │   │                                                                                 │
+│    280 │   │   │   try:                                                                          │
+│ ❱  281 │   │   │   │   return load_func(self)                                                    │
+│    282 │   │   │   except DatasetError:                                                          │
+│    283 │   │   │   │   raise                                                                     │
+│    284 │   │   │   except Exception as exc:                                                      │
+│                                                                                                  │
+│ /Users/neelanpather/dev/cybernaut_mini/src/cybernaut_mini/datasets.py:95 in load                 │
+│                                                                                                  │
+│    92 │   │   │   │   f"`--params input_path=data/01_raw/fixtures/documents.jsonl` "             │
+│    93 │   │   │   │   f"(CLI: `--input data/01_raw/fixtures/documents.jsonl`)."                  │
+│    94 │   │   │   )                                                                              │
+│ ❱  95 │   │   │   raise DatasetError(msg)                                                        │
+│    96 │   │                                                                                      │
+│    97 │   │   records: list[Any] = []                                                            │
+│    98 │   │   with self._filepath.open(encoding="utf-8") as handle:                              │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+DatasetError: /Users/neelanpather/dev/cybernaut_mini/data/03_primary/ccnews_miracl_corpus.jsonl does not exist.
+  If it is a pipeline output, produce it first: `kedro run --pipeline corpus_ingest` (see conf/base/catalog.yml).
+  If you meant an existing corpus, point at it: `--params input_path=data/01_raw/fixtures/documents.jsonl` (CLI: `--input data/01_raw/fixtures/documents.jsonl`).
+
+The above exception was the direct cause of the following exception:
+
+╭─────────────────────────────── Traceback (most recent call last) ────────────────────────────────╮
+│ /Users/neelanpather/dev/cybernaut_mini/.venv/bin/kedro:10 in <module>                            │
+│                                                                                                  │
+│ /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/kedro/framework/cli/cl │
+│ i.py:269 in main                                                                                 │
+│                                                                                                  │
+│   266 │   """                                                                                    │
+│   267 │   _init_plugins()                                                                        │
+│   268 │   cli_collection = KedroCLI(project_path=find_kedro_project(Path.cwd()) or Path.cwd())   │
+│ ❱ 269 │   cli_collection()                                                                       │
+│   270                                                                                            │
+│                                                                                                  │
+│ /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/click/core.py:1569 in  │
+│ __call__                                                                                         │
+│                                                                                                  │
+│ /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/kedro/framework/cli/cl │
+│ i.py:163 in main                                                                                 │
+│                                                                                                  │
+│   160 │   │   )                                                                                  │
+│   161 │   │                                                                                      │
+│   162 │   │   try:                                                                               │
+│ ❱ 163 │   │   │   super().main(                                                                  │
+│   164 │   │   │   │   args=args,                                                                 │
+│   165 │   │   │   │   prog_name=prog_name,                                                       │
+│   166 │   │   │   │   complete_var=complete_var,                                                 │
+│                                                                                                  │
+│ /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/click/core.py:1490 in  │
+│ main                                                                                             │
+│                                                                                                  │
+│ /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/click/core.py:1970 in  │
+│ invoke                                                                                           │
+│                                                                                                  │
+│ /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/click/core.py:1353 in  │
+│ invoke                                                                                           │
+│                                                                                                  │
+│ /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/click/core.py:907 in   │
+│ invoke                                                                                           │
+│                                                                                                  │
+│ /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/kedro/framework/cli/pr │
+│ oject.py:306 in run                                                                              │
+│                                                                                                  │
+│   303 │   │   run_kwargs["runtime_params"] = params                                              │
+│   304 │                                                                                          │
+│   305 │   with settings.SESSION_CLASS.create(**create_kwargs) as session:                        │
+│ ❱ 306 │   │   result: dict[str, Any] = session.run(**run_kwargs)                                 │
+│   307 │   return result                                                                          │
+│   308                                                                                            │
+│                                                                                                  │
+│ /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/kedro/framework/sessio │
+│ n/session.py:431 in run                                                                          │
+│                                                                                                  │
+│   428 │   │   │   run_params=record_data, pipeline=filtered_pipeline, catalog=catalog            │
+│   429 │   │   )                                                                                  │
+│   430 │   │   try:                                                                               │
+│ ❱ 431 │   │   │   run_result = runner.run(                                                       │
+│   432 │   │   │   │   filtered_pipeline,                                                         │
+│   433 │   │   │   │   catalog,                                                                   │
+│   434 │   │   │   │   hook_manager,                                                              │
+│                                                                                                  │
+│ /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/kedro/runner/runner.py │
+│ :115 in run                                                                                      │
+│                                                                                                  │
+│   112 │   │   │   )                                                                              │
+│   113 │   │                                                                                      │
+│   114 │   │   start_time = perf_counter()                                                        │
+│ ❱ 115 │   │   self._run(pipeline, catalog, hook_or_null_manager, run_id)  # type: ignore[arg-t   │
+│   116 │   │   end_time = perf_counter()                                                          │
+│   117 │   │   run_duration = end_time - start_time                                               │
+│   118                                                                                            │
+│                                                                                                  │
+│ /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/kedro/runner/sequentia │
+│ l_runner.py:63 in _run                                                                           │
+│                                                                                                  │
+│   60 │   │   │   │   "Using synchronous mode for loading and saving data. Use the --async fla    │
+│   61 │   │   │   │   "for potential performance gains. https://docs.kedro.org/en/stable/build    │
+│   62 │   │   │   )                                                                               │
+│ ❱ 63 │   │   super()._run(                                                                       │
+│   64 │   │   │   pipeline=pipeline,                                                              │
+│   65 │   │   │   catalog=catalog,                                                                │
+│   66 │   │   │   hook_manager=hook_manager,                                                      │
+│                                                                                                  │
+│ /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/kedro/runner/runner.py │
+│ :240 in _run                                                                                     │
+│                                                                                                  │
+│   237 │   │   │   │   │   │   hook_manager=hook_manager,                                         │
+│   238 │   │   │   │   │   │   is_async=self._is_async,                                           │
+│   239 │   │   │   │   │   │   run_id=run_id,                                                     │
+│ ❱ 240 │   │   │   │   │   ).execute()                                                            │
+│   241 │   │   │   │   │   done_nodes.add(node)                                                   │
+│   242 │   │   │   │   except Exception:                                                          │
+│   243 │   │   │   │   │   self._suggest_resume_scenario(pipeline, done_nodes, catalog)           │
+│                                                                                                  │
+│ /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/kedro/runner/task.py:8 │
+│ 9 in execute                                                                                     │
+│                                                                                                  │
+│    86 │   │   │   │   self.run_id,                                                               │
+│    87 │   │   │   )                                                                              │
+│    88 │   │   else:                                                                              │
+│ ❱  89 │   │   │   node = self._run_node_sequential(                                              │
+│    90 │   │   │   │   self.node,                                                                 │
+│    91 │   │   │   │   self.catalog,                                                              │
+│    92 │   │   │   │   self.hook_manager,  # type: ignore[arg-type]                               │
+│                                                                                                  │
+│ /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/kedro/runner/task.py:1 │
+│ 56 in _run_node_sequential                                                                       │
+│                                                                                                  │
+│   153 │   │                                                                                      │
+│   154 │   │   for name in node.inputs:                                                           │
+│   155 │   │   │   hook_manager.hook.before_dataset_loaded(dataset_name=name, node=node)          │
+│ ❱ 156 │   │   │   inputs[name] = catalog.load(name)                                              │
+│   157 │   │   │   hook_manager.hook.after_dataset_loaded(                                        │
+│   158 │   │   │   │   dataset_name=name, data=inputs[name], node=node                            │
+│   159 │   │   │   )                                                                              │
+│                                                                                                  │
+│ /Users/neelanpather/dev/cybernaut_mini/.venv/lib/python3.12/site-packages/kedro/io/data_catalog. │
+│ py:1060 in load                                                                                  │
+│                                                                                                  │
+│   1057 │   │   try:                                                                              │
+│   1058 │   │   │   return dataset.load()                                                         │
+│   1059 │   │   except DatasetError as e:                                                         │
+│ ❱ 1060 │   │   │   raise DatasetError(f"{ds_name}: {e}") from e                                  │
+│   1061 │                                                                                         │
+│   1062 │   def release(self, ds_name: str) -> None:                                              │
+│   1063 │   │   """Release any cached data associated with a dataset                              │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+DatasetError: documents: /Users/neelanpather/dev/cybernaut_mini/data/03_primary/ccnews_miracl_corpus.jsonl does not exist.
+  If it is a pipeline output, produce it first: `kedro run --pipeline corpus_ingest` (see conf/base/catalog.yml).
+  If you meant an existing corpus, point at it: `--params input_path=data/01_raw/fixtures/documents.jsonl` (CLI: `--input data/01_raw/fixtures/documents.jsonl`).
+
+---
+
+<task-notification>
+<task-id>bv4sxu1bu</task-id>
+<tool-use-id>c1225ced-7f85-4bcb-ace2-1c8d4f3afd8b:inner</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-neelanpather-dev-cybernaut-mini/cbed7cc0-b563-4835-8207-878b29c970f9/tasks/bv4sxu1bu.output</output-file>
+<status>failed</status>
+<summary>Background command "scripts/with-accel.sh uv run kedro run --env prod --pipeline corpus_ingest --from-nodes=snapshot_raw_miracl" failed with exit code 1</summary>
+</task-notification>
