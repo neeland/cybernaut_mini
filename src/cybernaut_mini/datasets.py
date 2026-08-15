@@ -11,6 +11,7 @@ Hugging Face one without touching pipeline code.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,8 @@ from kedro.io import AbstractDataset
 from kedro.io.core import DatasetError
 
 from cybernaut_mini.models import canonical_dumps
+
+logger = logging.getLogger(__name__)
 
 #: Committed fixture directories. A pipeline writing here would silently rewrite the
 #: golden corpus that the determinism tests compare against, so saves are refused.
@@ -195,6 +198,9 @@ class HuggingFaceDataset(AbstractDataset[None, list[dict[str, Any]]]):
     #: Shipped in conf/prod as a deliberate tripwire — a real SHA must replace it.
     _PLACEHOLDER_REF = "replace_with_commit_sha"
 
+    #: Emit a streaming heartbeat every this many rows pulled off the wire.
+    _LOG_EVERY_ROWS = 100_000
+
     def __init__(
         self,
         repo_id: str,
@@ -254,11 +260,20 @@ class HuggingFaceDataset(AbstractDataset[None, list[dict[str, Any]]]):
 
     def _load_eager(self, load_dataset: Any, token: str | None) -> list[dict[str, Any]]:
         """Non-streaming path: byte-identical to the original implementation."""
+        import time
+
         split = self._split
         if self._max_rows is not None:
             # Slice in the split spec so only the requested rows are materialised.
             split = f"{split}[:{self._max_rows}]"
 
+        start = time.monotonic()
+        logger.info(
+            "%s@%s: loading split %r (eager) ...",
+            self._repo_id,
+            self._revision[:12],
+            split,
+        )
         dataset = load_dataset(
             self._repo_id,
             self._config,
@@ -277,12 +292,27 @@ class HuggingFaceDataset(AbstractDataset[None, list[dict[str, Any]]]):
             dataset = dataset.select_columns(self._columns)
 
         rows: list[dict[str, Any]] = [dict(row) for row in dataset]
+        logger.info(
+            "%s: loaded %s row(s) in %.1fs",
+            self._repo_id,
+            f"{len(rows):,}",
+            time.monotonic() - start,
+        )
         return rows
 
     def _load_streaming(self, load_dataset: Any, token: str | None) -> list[dict[str, Any]]:
         """Streaming path: opens an IterableDataset and slices with islice."""
         import itertools
+        import time
 
+        start = time.monotonic()
+        logger.info(
+            "%s@%s: streaming split %r%s ...",
+            self._repo_id,
+            self._revision[:12],
+            self._split,
+            f" (capped at {self._max_rows:,} rows)" if self._max_rows is not None else "",
+        )
         dataset = load_dataset(
             self._repo_id,
             self._config,
@@ -316,6 +346,22 @@ class HuggingFaceDataset(AbstractDataset[None, list[dict[str, Any]]]):
                 )
                 raise DatasetError(msg)
 
+        # Heartbeat on rows pulled off the wire, before filtering: a tight
+        # filter can keep almost nothing for long stretches, and this is the
+        # counter that shows the stream is still moving.
+        def _counted(source: Any) -> Any:
+            for scanned, row in enumerate(source, start=1):
+                if scanned % self._LOG_EVERY_ROWS == 0:
+                    logger.info(
+                        "%s: scanned %s streamed row(s), %.0fs elapsed",
+                        self._repo_id,
+                        f"{scanned:,}",
+                        time.monotonic() - start,
+                    )
+                yield row
+
+        it = _counted(it)
+
         # Apply filter_equals BEFORE max_rows so the cap counts only matching rows.
         if self._filter_equals is not None:
             fe = self._filter_equals
@@ -326,8 +372,16 @@ class HuggingFaceDataset(AbstractDataset[None, list[dict[str, Any]]]):
 
         if self._columns is not None:
             cols = self._columns
-            return [{col: row[col] for col in cols} for row in it]
-        return [dict(row) for row in it]
+            rows = [{col: row[col] for col in cols} for row in it]
+        else:
+            rows = [dict(row) for row in it]
+        logger.info(
+            "%s: kept %s streamed row(s) in %.1fs",
+            self._repo_id,
+            f"{len(rows):,}",
+            time.monotonic() - start,
+        )
+        return rows
 
     def save(self, data: None) -> None:
         msg = (
@@ -388,6 +442,22 @@ class HfFileDataset(AbstractDataset[None, list[dict[str, Any]]]):
         - ``hf_hub_download`` per shard (requires enumerating all shard names
           up front): ``HfFileSystem.glob`` lists the directory lazily without
           materialising every path, which is what streaming decompression needs.
+        - Retrying the *entire* load on a transient error: replaying 30 min of
+          network I/O to recover from a fault that arrives at shard 55/66 (~83%)
+          wastes all prior work. Shard-level retry (below) discards only that one
+          shard's bytes.
+
+    Why the client closes mid-scan:
+        ``huggingface_hub`` maintains a persistent HTTP client inside the
+        ``HfFileSystem`` instance. On long-running scans (MIRACL ≈ 30 min, 66
+        shards) the underlying session can time out or be garbage-collected,
+        leaving the client in a closed state: ``RuntimeError: Cannot send a
+        request, as the client has been closed``. Because the error is bound to
+        the ``HfFileSystem`` instance (not the shard file), simply reopening the
+        file via the same ``fs`` object fails again. A new
+        ``HfFileSystem(skip_instance_cache=True)`` creates a fresh HTTP session;
+        the ``skip_instance_cache`` kwarg prevents ``huggingface_hub`` from
+        returning the same closed instance from its module-level cache.
 
     Requires the ``hf`` extra (``uv sync --extra hf``).
     """
@@ -431,9 +501,39 @@ class HfFileDataset(AbstractDataset[None, list[dict[str, Any]]]):
         )
         self._token_env = token_env
 
+    #: Emit a within-shard heartbeat every this many scanned lines, so a single
+    #: multi-GB shard still shows liveness between the per-shard log lines.
+    _LOG_EVERY_LINES = 100_000
+
+    #: Sleep durations (seconds) before shard-read attempt 2, 3, 4.
+    #: Three entries → up to four attempts per shard (initial + three retries).
+    _RETRY_DELAYS: tuple[float, ...] = (2.0, 8.0, 30.0)
+
+    @staticmethod
+    def _is_retryable(exc: BaseException) -> bool:
+        """Return True for transient network errors that warrant a shard retry.
+
+        The closed-client ``RuntimeError`` is the error observed in production
+        (MIRACL, shard 55/66). ``ConnectionError`` and ``TimeoutError`` cover
+        TCP-level drops. ``HfHubHTTPError`` covers Hub 5xx responses.
+        """
+        if isinstance(exc, (ConnectionError, TimeoutError)):
+            return True
+        if isinstance(exc, RuntimeError) and "client has been closed" in str(exc).lower():
+            return True
+        try:
+            from huggingface_hub.utils import HfHubHTTPError  # type: ignore[import-not-found]
+
+            if isinstance(exc, HfHubHTTPError):
+                return True
+        except ImportError:
+            pass
+        return False
+
     def load(self) -> list[dict[str, Any]]:
         import gzip
         import json
+        import time
 
         try:
             from huggingface_hub import HfFileSystem
@@ -447,6 +547,13 @@ class HfFileDataset(AbstractDataset[None, list[dict[str, Any]]]):
         token = os.environ.get(self._token_env) or None
         fs = HfFileSystem(token=token)
 
+        start = time.monotonic()
+        logger.info(
+            "%s@%s: listing shards matching %r ...",
+            self._repo_id,
+            self._revision[:12],
+            self._path_pattern,
+        )
         # HfFileSystem uses path format  datasets/{repo_id}@{revision}/{path}
         hf_glob = f"datasets/{self._repo_id}@{self._revision}/{self._path_pattern}"
         try:
@@ -465,39 +572,139 @@ class HfFileDataset(AbstractDataset[None, list[dict[str, Any]]]):
             )
             raise DatasetError(msg)
 
+        logger.info(
+            "%s: found %d shard(s) in %.1fs; streaming%s ...",
+            self._repo_id,
+            len(shard_paths),
+            time.monotonic() - start,
+            f" (capped at {self._max_rows:,} rows)"
+            if self._max_rows is not None
+            else "",
+        )
+
         rows: list[dict[str, Any]] = []
+        scanned = 0
         filter_col = self._filter_column
         filter_vals = self._filter_values  # frozenset or None
+        max_attempts = len(self._RETRY_DELAYS) + 1
 
-        for shard_path in shard_paths:
+        for shard_index, shard_path in enumerate(shard_paths, start=1):
             if self._max_rows is not None and len(rows) >= self._max_rows:
+                logger.info(
+                    "%s: row cap reached; skipping remaining %d shard(s)",
+                    self._repo_id,
+                    len(shard_paths) - shard_index + 1,
+                )
                 break
-            try:
-                with fs.open(shard_path, "rb") as raw_fh:
-                    with gzip.open(raw_fh, "rt", encoding="utf-8") as gz:
+
+            shard_name = shard_path.rsplit("/", 1)[-1]
+
+            # ── Per-shard retry loop ──────────────────────────────────────────
+            # On a transient network error (closed client, connection drop, 5xx)
+            # we recreate HfFileSystem (fresh HTTP session) and retry. The
+            # shard-row buffer is discarded and rebuilt from scratch each attempt
+            # so partial reads never contaminate the final result.
+            for attempt, delay in enumerate(
+                (None, *self._RETRY_DELAYS), start=1
+            ):
+                if delay is not None:
+                    logger.warning(
+                        "%s: shard %d/%d %s — transient error; "
+                        "recreating HfFileSystem and retrying "
+                        "(attempt %d/%d) after %.0fs ...",
+                        self._repo_id,
+                        shard_index,
+                        len(shard_paths),
+                        shard_name,
+                        attempt,
+                        max_attempts,
+                        delay,
+                    )
+                    time.sleep(delay)
+                    fs = HfFileSystem(token=token, skip_instance_cache=True)
+
+                shard_rows: list[dict[str, Any]] = []
+                shard_scanned = 0
+
+                try:
+                    with (
+                        fs.open(shard_path, "rb") as raw_fh,
+                        gzip.open(raw_fh, "rt", encoding="utf-8") as gz,
+                    ):
                         for line in gz:
                             line = line.strip()
                             if not line:
                                 continue
+                            shard_scanned += 1
+                            if shard_scanned % self._LOG_EVERY_LINES == 0:
+                                logger.info(
+                                    "%s: shard %d/%d %s — line %s, "
+                                    "total kept %s, %.0fs elapsed",
+                                    self._repo_id,
+                                    shard_index,
+                                    len(shard_paths),
+                                    shard_name,
+                                    f"{shard_scanned:,}",
+                                    f"{len(rows) + len(shard_rows):,}",
+                                    time.monotonic() - start,
+                                )
                             row = json.loads(line)
-                            if filter_col is not None and filter_vals is not None:
-                                if row.get(filter_col) not in filter_vals:
-                                    continue
-                            rows.append(row)
-                            if self._max_rows is not None and len(rows) >= self._max_rows:
+                            if (
+                                filter_col is not None
+                                and filter_vals is not None
+                                and row.get(filter_col) not in filter_vals
+                            ):
+                                continue
+                            shard_rows.append(row)
+                            if (
+                                self._max_rows is not None
+                                and len(rows) + len(shard_rows) >= self._max_rows
+                            ):
                                 break
-            except DatasetError:
-                raise
-            except Exception as exc:
-                msg = (
-                    f"HfFileDataset({self._repo_id!r}): error reading "
-                    f"{shard_path!r}: {exc}"
-                )
-                raise DatasetError(msg) from exc
+                    break  # shard completed successfully — exit retry loop
+                except DatasetError:
+                    raise
+                except Exception as exc:
+                    if not self._is_retryable(exc) or attempt >= max_attempts:
+                        msg = (
+                            f"HfFileDataset({self._repo_id!r}): error reading "
+                            f"{shard_name!r} (attempt {attempt}/{max_attempts}): {exc}"
+                        )
+                        raise DatasetError(msg) from exc
+                    logger.warning(
+                        "%s: shard %d/%d %s — %s (attempt %d/%d)",
+                        self._repo_id,
+                        shard_index,
+                        len(shard_paths),
+                        shard_name,
+                        exc,
+                        attempt,
+                        max_attempts,
+                    )
 
+            rows.extend(shard_rows)
+            scanned += shard_scanned
+            logger.info(
+                "%s: shard %d/%d %s — %s rows kept, %s scanned, %.0fs elapsed",
+                self._repo_id,
+                shard_index,
+                len(shard_paths),
+                shard_name,
+                f"{len(shard_rows):,}",
+                f"{shard_scanned:,}",
+                time.monotonic() - start,
+            )
+
+        logger.info(
+            "%s: done — kept %s row(s) from %s scanned line(s) in %.1fs",
+            self._repo_id,
+            f"{len(rows):,}",
+            f"{scanned:,}",
+            time.monotonic() - start,
+        )
         return rows
 
-    def save(self, data: None) -> None:
+    def save(self, data: Any) -> None:
         msg = (
             f"HfFileDataset({self._repo_id!r}) is read-only; write the "
             f"normalised corpus to a JsonlDataset in data/01_raw instead."

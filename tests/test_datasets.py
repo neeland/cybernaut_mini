@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import gzip
+import io
+import json
 import sys
+import time as _time_module
 import types
 from pathlib import Path
 from typing import Any
@@ -11,6 +15,7 @@ from kedro.io.core import DatasetError
 
 from cybernaut_mini.datasets import (
     CanonicalJsonDataset,
+    HfFileDataset,
     HuggingFaceDataset,
     JsonlDataset,
     MiraclTsvDataset,
@@ -543,3 +548,268 @@ def test_miracl_tsv_multiple_positives_collected(monkeypatch: pytest.MonkeyPatch
     assert len(rows) == 1
     assert len(rows[0]["positive_passages"]) == 2
     assert len(rows[0]["negative_passages"]) == 1
+
+
+# ------------------------------------------------------------------ #
+# HfFileDataset — offline tests                                       #
+# ------------------------------------------------------------------ #
+
+
+_CORPUS_SHA = "d921ec7e349ce0d28daf30b2da9da5ee698bef0d"
+_REPO_ID = "miracl/miracl-corpus"
+_PATH_PAT = "miracl-corpus-v1.0-en/*.jsonl.gz"
+_HF_GLOB = f"datasets/{_REPO_ID}@{_CORPUS_SHA}/miracl-corpus-v1.0-en"
+
+
+def _gz_bytes(rows: list[dict]) -> bytes:
+    """Return gzip-compressed JSONL bytes for a fake shard."""
+    buf = io.BytesIO()
+    with gzip.open(buf, "wt", encoding="utf-8") as gz:
+        for row in rows:
+            gz.write(json.dumps(row) + "\n")
+    return buf.getvalue()
+
+
+class _GzFile:
+    """Binary context-manager wrapping bytes — mimics fs.open(path, 'rb')."""
+
+    def __init__(self, data: bytes) -> None:
+        self._buf = io.BytesIO(data)
+
+    def __enter__(self) -> io.BytesIO:
+        return self._buf
+
+    def __exit__(self, *a: object) -> None:
+        pass
+
+
+def _install_fake_hf_file_fs(
+    monkeypatch: pytest.MonkeyPatch,
+    shards: dict[str, bytes],
+    *,
+    fail_shard: str | None = None,
+    fail_error: Exception | None = None,
+    fail_on_attempts: int = 1,
+    created_fs: list | None = None,
+) -> None:
+    """Patch ``huggingface_hub.HfFileSystem`` for HfFileDataset without network.
+
+    ``shards``: mapping from full HF path to gzip-JSONL bytes.
+    ``fail_shard``: basename of shard to make transiently fail.
+    ``fail_error``: exception to raise; defaults to the closed-client RuntimeError.
+    ``fail_on_attempts``: number of consecutive attempts that raise before success.
+    ``created_fs``: if provided, each HfFileSystem() construction appends
+        ``{"skip_instance_cache": bool}`` so tests can verify re-creation.
+    """
+    call_counts: dict[str, int] = {}
+    _err = fail_error or RuntimeError(
+        "Cannot send a request, as the client has been closed"
+    )
+
+    class _FakeFs:
+        def __init__(
+            self, token: object = None, skip_instance_cache: bool = False
+        ) -> None:
+            if created_fs is not None:
+                created_fs.append({"skip_instance_cache": skip_instance_cache})
+
+        def glob(self, pattern: str) -> list[str]:
+            return sorted(shards)
+
+        def open(self, path: str, mode: str = "rb") -> _GzFile:
+            if fail_shard and path.endswith(fail_shard):
+                call_counts[path] = call_counts.get(path, 0) + 1
+                if call_counts[path] <= fail_on_attempts:
+                    raise _err
+            if path not in shards:
+                raise FileNotFoundError(f"fake fs: {path!r}")
+            return _GzFile(shards[path])
+
+    fake_hf = types.ModuleType("huggingface_hub")
+    fake_hf.HfFileSystem = _FakeFs  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "huggingface_hub", fake_hf)
+
+
+def _make_shards(n: int, rows_each: int = 2) -> dict[str, bytes]:
+    """Return ``n`` named fake shards, each with ``rows_each`` docid rows."""
+    shards = {}
+    for i in range(n):
+        name = f"docs-{i:02d}.jsonl.gz"
+        path = f"datasets/{_REPO_ID}@{_CORPUS_SHA}/miracl-corpus-v1.0-en/{name}"
+        rows = [
+            {"docid": f"{i*rows_each+j}#0", "title": f"T{i}{j}", "text": f"body {i} {j}"}
+            for j in range(rows_each)
+        ]
+        shards[path] = _gz_bytes(rows)
+    return shards
+
+
+@pytest.mark.parametrize("revision", ["main", "master", "HEAD", ""])
+def test_hf_file_dataset_unpinned_revision_is_rejected(revision: str) -> None:
+    with pytest.raises(DatasetError, match="immutable"):
+        HfFileDataset(repo_id=_REPO_ID, revision=revision, path_pattern=_PATH_PAT)
+
+
+def test_hf_file_dataset_placeholder_revision_is_rejected() -> None:
+    with pytest.raises(DatasetError, match="placeholder"):
+        HfFileDataset(
+            repo_id=_REPO_ID,
+            revision="REPLACE_WITH_COMMIT_SHA",
+            path_pattern=_PATH_PAT,
+        )
+
+
+def test_hf_file_dataset_is_read_only() -> None:
+    ds = HfFileDataset(repo_id=_REPO_ID, revision=_CORPUS_SHA, path_pattern=_PATH_PAT)
+    with pytest.raises(DatasetError, match="read-only"):
+        ds.save([])  # type: ignore[arg-type]
+
+
+def test_hf_file_dataset_exists_never_probes_network() -> None:
+    ds = HfFileDataset(repo_id=_REPO_ID, revision=_CORPUS_SHA, path_pattern=_PATH_PAT)
+    assert ds.exists() is False
+
+
+def test_hf_file_dataset_describe_contains_key_fields() -> None:
+    ds = HfFileDataset(
+        repo_id=_REPO_ID,
+        revision=_CORPUS_SHA,
+        path_pattern=_PATH_PAT,
+        max_rows=500,
+    )
+    d = ds._describe()
+    assert d["repo_id"] == _REPO_ID
+    assert d["revision"] == _CORPUS_SHA
+    assert d["path_pattern"] == _PATH_PAT
+    assert d["max_rows"] == 500
+
+
+def test_hf_file_dataset_loads_all_shards(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Happy-path: 3 shards x 2 rows = 6 total rows in alphabetical shard order."""
+    shards = _make_shards(3, rows_each=2)
+    _install_fake_hf_file_fs(monkeypatch, shards)
+    monkeypatch.setattr(_time_module, "sleep", lambda _: None)
+
+    ds = HfFileDataset(repo_id=_REPO_ID, revision=_CORPUS_SHA, path_pattern=_PATH_PAT)
+    result = ds.load()
+    assert len(result) == 6
+    assert result[0]["docid"] == "0#0"  # first row of first shard
+
+
+def test_hf_file_dataset_max_rows_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    shards = _make_shards(4, rows_each=3)
+    _install_fake_hf_file_fs(monkeypatch, shards)
+    monkeypatch.setattr(_time_module, "sleep", lambda _: None)
+
+    ds = HfFileDataset(
+        repo_id=_REPO_ID, revision=_CORPUS_SHA, path_pattern=_PATH_PAT, max_rows=5
+    )
+    result = ds.load()
+    assert len(result) == 5
+
+
+# ── Retry tests ───────────────────────────────────────────────────────────────
+
+
+def test_hf_file_dataset_retries_transient_error_and_returns_full_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Shard 2 raises closed-client RuntimeError once; retry succeeds → full result.
+
+    This is the production failure mode: MIRACL shard 55/66,
+    ``RuntimeError: Cannot send a request, as the client has been closed``.
+    """
+    shards = _make_shards(3, rows_each=2)
+    shard2_name = sorted(shards)[1].rsplit("/", 1)[-1]  # docs-01.jsonl.gz
+
+    created_fs: list[dict] = []
+    _install_fake_hf_file_fs(
+        monkeypatch,
+        shards,
+        fail_shard=shard2_name,
+        fail_on_attempts=1,
+        created_fs=created_fs,
+    )
+    sleeps: list[float] = []
+    monkeypatch.setattr(_time_module, "sleep", sleeps.append)
+
+    ds = HfFileDataset(repo_id=_REPO_ID, revision=_CORPUS_SHA, path_pattern=_PATH_PAT)
+    result = ds.load()
+
+    # Full 6 rows across all 3 shards — nothing was lost.
+    assert len(result) == 6
+
+    # sleep() was called once (2-second first retry delay).
+    assert len(sleeps) == 1
+    assert sleeps[0] == pytest.approx(2.0)
+
+    # The retry created a new HfFileSystem with skip_instance_cache=True.
+    assert any(c["skip_instance_cache"] for c in created_fs), (
+        "expected HfFileSystem(skip_instance_cache=True) on retry"
+    )
+
+
+def test_hf_file_dataset_permanent_failure_raises_dataset_error_naming_shard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Shard that fails all 4 attempts → DatasetError that names the shard file."""
+    shards = _make_shards(2, rows_each=2)
+    shard2_name = sorted(shards)[1].rsplit("/", 1)[-1]  # docs-01.jsonl.gz
+
+    _install_fake_hf_file_fs(
+        monkeypatch,
+        shards,
+        fail_shard=shard2_name,
+        fail_on_attempts=999,  # always fails
+    )
+    monkeypatch.setattr(_time_module, "sleep", lambda _: None)
+
+    ds = HfFileDataset(repo_id=_REPO_ID, revision=_CORPUS_SHA, path_pattern=_PATH_PAT)
+    with pytest.raises(DatasetError, match=shard2_name):
+        ds.load()
+
+
+def test_hf_file_dataset_non_retryable_error_raises_immediately(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-transient error (e.g. JSON decode) must not be retried."""
+    shards = _make_shards(2, rows_each=2)
+    shard2_name = sorted(shards)[1].rsplit("/", 1)[-1]
+
+    _install_fake_hf_file_fs(
+        monkeypatch,
+        shards,
+        fail_shard=shard2_name,
+        fail_error=ValueError("bad json"),
+        fail_on_attempts=999,
+    )
+    sleeps: list[float] = []
+    monkeypatch.setattr(_time_module, "sleep", sleeps.append)
+
+    ds = HfFileDataset(repo_id=_REPO_ID, revision=_CORPUS_SHA, path_pattern=_PATH_PAT)
+    with pytest.raises(DatasetError):
+        ds.load()
+
+    # No sleep means no retry was attempted.
+    assert sleeps == [], "non-retryable error must not trigger retry sleeps"
+
+
+def test_hf_file_dataset_per_shard_progress_logged(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An INFO log line mentioning the shard name must appear for every shard."""
+    import logging
+
+    shards = _make_shards(3, rows_each=2)
+    _install_fake_hf_file_fs(monkeypatch, shards)
+    monkeypatch.setattr(_time_module, "sleep", lambda _: None)
+
+    ds = HfFileDataset(repo_id=_REPO_ID, revision=_CORPUS_SHA, path_pattern=_PATH_PAT)
+    with caplog.at_level(logging.INFO, logger="cybernaut_mini.datasets"):
+        ds.load()
+
+    shard_names = [p.rsplit("/", 1)[-1] for p in sorted(shards)]
+    for name in shard_names:
+        matching = [r for r in caplog.records if name in r.message]
+        assert matching, f"no INFO log line found for shard {name!r}"
