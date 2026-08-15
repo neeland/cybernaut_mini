@@ -1,0 +1,5 @@
+Check if task #1 (Phase 0: land the WIP as atomic commits) has completed. If it has, claim task #4 (M4.1: shard_recall@N metric + eval wiring) and implement it. If still blocked, check again later.
+
+---
+
+Check if task #2 (M1.1: discovery spike — pin CC-News + MIRACL schemas and SHAs) has completed. If it has, claim task #6 (M1.3: multi-source corpus_ingest) and implement it. If still blocked, check again later.
