@@ -1,0 +1,5 @@
+seems kedro is causing a performance issue. fix
+
+---
+
+do a deep audit and optimise kedro pipeline as much as possible before we kick off run
