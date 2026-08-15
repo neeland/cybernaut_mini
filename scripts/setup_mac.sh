@@ -128,6 +128,6 @@ to your shell profile, or use the Makefile targets, which do it for you.
 Next:
   make check          lint + typecheck + tests
   make accel          re-print the report above
-  make build-sample   a 63-document index, ~seconds
+  make build-fixture  build the real fixture index, ~seconds
 
 EOF

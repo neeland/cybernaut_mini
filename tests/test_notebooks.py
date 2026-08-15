@@ -30,8 +30,8 @@ _DIRECT_PATH_SMELLS = (
     'open("data/',
     "open('data/",
     'read_text("data/',
-    'Path("data/sample',
-    "Path('data/sample",
+    'Path("data/01_raw/fixtures',
+    "Path('data/01_raw/fixtures",
     'np.load("artifacts',
     'open("artifacts',
 )

@@ -83,10 +83,9 @@ EXEMPT_PATTERN = re.compile(r"docs-check:\s*exempt\(([^)]+)\)")
 #: "THIS MUST NEVER USE DUMMY DATA." Synthetic corpora and fabricated relevance
 #: judgments silently poison every downstream metric, so their return is a hard
 #: failure rather than a warning.
-BANNED_PATHS = (
-    "data/sample/",
-    "scripts/generate_sample_corpus.py",
-)
+#: (The synthetic data that used to live here was replaced by the real MIRACL +
+#: CC-News fixture slice at data/01_raw/fixtures/ in M1.7.)
+BANNED_PATHS: tuple[()] = ()
 
 BANNED_PATH_REASON = (
     "synthetic corpora and fabricated judgments are banned; this repo evaluates "

@@ -69,9 +69,9 @@ cat > ~/.config/dev-bootstrap/commands.txt <<'EOF'
 source .venv/bin/activate            # activate the project venv
 make env                             # sync MCP/API keys into .env + .claude/settings.local.json
 make check                           # lint + typecheck + test (includes notebook execution)
-make build-sample                    # build the sample index (configs/tiny.yaml)
-make search-sample                   # hybrid search over the sample index
-make eval-sample                     # eval against data/sample/judgments.jsonl
+make build-fixture                   # build the fixture index (configs/tiny.yaml)
+make search-fixture                  # hybrid search over the fixture index
+make eval-fixture                    # eval against data/01_raw/fixtures/judgments.jsonl
 pytest -q                            # test suite
 
 # Kedro pipelines (all data flows through conf/base/catalog.yml)
@@ -88,7 +88,7 @@ make lab                             # JupyterLab with catalog/context/session i
 make install-prod                    # add the hf + st extras for real corpus builds
 make entire                          # install/refresh the Entire CLI + its hooks
 make doctor                          # verify the whole container is wired up
-vd artifacts/sample                  # browse index artifacts (VisiData)
+vd artifacts/fixture                 # browse index artifacts (VisiData)
 scripts/devcontainer_doctor.sh       # verify claude/omc/uv/.venv/kedro/catalog are healthy
 scripts/setup_claude_omc.sh          # (re)install/update Claude Code + OMC
 EOF

@@ -91,19 +91,19 @@ def test_datasets_report_existence(tmp_path: Path) -> None:
 def test_save_into_committed_fixture_dir_is_refused(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Regression: the corpus_ingest pipeline once overwrote data/sample.
+    """Regression: the corpus_ingest pipeline once overwrote committed fixture data.
 
     `documents` is both an ingest output and a build input, so a default pointing
-    into data/sample made an acquisition run silently rewrite the golden corpus the
-    determinism tests compare against.
+    into the fixture directory would make an acquisition run silently rewrite the
+    golden corpus the determinism tests compare against.
     """
     project = tmp_path / "project"
-    (project / "data" / "sample").mkdir(parents=True)
-    fixture = project / "data" / "sample" / "documents.jsonl"
+    (project / "data" / "01_raw" / "fixtures").mkdir(parents=True)
+    fixture = project / "data" / "01_raw" / "fixtures" / "documents.jsonl"
     fixture.write_text('{"id":"original"}\n', encoding="utf-8")
     monkeypatch.chdir(project)
 
-    dataset = JsonlDataset("data/sample/documents.jsonl")
+    dataset = JsonlDataset("data/01_raw/fixtures/documents.jsonl")
     with pytest.raises(DatasetError, match="committed fixtures"):
         dataset.save([{"id": "replacement"}])
 
@@ -114,15 +114,15 @@ def test_save_into_committed_fixture_dir_is_refused(
 def test_reading_a_committed_fixture_still_works(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The guard is write-only: --input data/sample/documents.jsonl must still load."""
+    """The guard is write-only: --input data/01_raw/fixtures/documents.jsonl must still load."""
     project = tmp_path / "project"
-    (project / "data" / "sample").mkdir(parents=True)
-    (project / "data" / "sample" / "documents.jsonl").write_text(
+    (project / "data" / "01_raw" / "fixtures").mkdir(parents=True)
+    (project / "data" / "01_raw" / "fixtures" / "documents.jsonl").write_text(
         '{"id":"original"}\n', encoding="utf-8"
     )
     monkeypatch.chdir(project)
 
-    assert JsonlDataset("data/sample/documents.jsonl").load() == [{"id": "original"}]
+    assert JsonlDataset("data/01_raw/fixtures/documents.jsonl").load() == [{"id": "original"}]
 
 
 def test_generated_layers_are_writable(

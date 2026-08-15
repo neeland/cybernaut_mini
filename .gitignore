@@ -19,6 +19,8 @@ conf/local/*
 # source, so they are never committed; data/sample and data/00_reference are.
 data/01_raw/*
 !data/01_raw/.gitkeep
+!data/01_raw/fixtures/
+!data/01_raw/fixtures/*.jsonl
 data/02_intermediate/*
 !data/02_intermediate/.gitkeep
 data/03_primary/*

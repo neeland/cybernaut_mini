@@ -24,8 +24,8 @@ from cybernaut_mini.models import canonical_dumps
 
 #: Committed fixture directories. A pipeline writing here would silently rewrite the
 #: golden corpus that the determinism tests compare against, so saves are refused.
-#: Reads are unaffected — `--input data/sample/documents.jsonl` stays supported.
-PROTECTED_DIRS = ("data/sample", "data/00_reference")
+#: Reads are unaffected — `--input data/01_raw/fixtures/documents.jsonl` stays supported.
+PROTECTED_DIRS = ("data/01_raw/fixtures", "data/00_reference")
 
 
 def _guard_protected(filepath: Path) -> None:
@@ -60,7 +60,10 @@ class CanonicalJsonDataset(AbstractDataset[Any, Any]):
     def save(self, data: Any) -> None:
         _guard_protected(self._filepath)
         self._filepath.parent.mkdir(parents=True, exist_ok=True)
-        self._filepath.write_text(canonical_dumps(data) + "\n", encoding="utf-8")
+        # Atomic write: crash mid-save leaves no partial file at the real path.
+        tmp = self._filepath.with_suffix(".tmp")
+        tmp.write_text(canonical_dumps(data) + "\n", encoding="utf-8")
+        tmp.replace(self._filepath)
 
     def _exists(self) -> bool:
         return self._filepath.exists()
@@ -86,8 +89,8 @@ class JsonlDataset(AbstractDataset[list[Any], list[Any]]):
                 f"  If it is a pipeline output, produce it first: "
                 f"`kedro run --pipeline corpus_ingest` (see conf/base/catalog.yml).\n"
                 f"  If you meant an existing corpus, point at it: "
-                f"`--params input_path=data/sample/documents.jsonl` "
-                f"(CLI: `--input data/sample/documents.jsonl`)."
+                f"`--params input_path=data/01_raw/fixtures/documents.jsonl` "
+                f"(CLI: `--input data/01_raw/fixtures/documents.jsonl`)."
             )
             raise DatasetError(msg)
 
@@ -103,7 +106,10 @@ class JsonlDataset(AbstractDataset[list[Any], list[Any]]):
         _guard_protected(self._filepath)
         self._filepath.parent.mkdir(parents=True, exist_ok=True)
         lines = "".join(canonical_dumps(record) + "\n" for record in data)
-        self._filepath.write_text(lines, encoding="utf-8")
+        # Atomic write: crash mid-save leaves no partial file at the real path.
+        tmp = self._filepath.with_suffix(".tmp")
+        tmp.write_text(lines, encoding="utf-8")
+        tmp.replace(self._filepath)
 
     def _exists(self) -> bool:
         return self._filepath.exists()
@@ -125,7 +131,10 @@ class NpyDataset(AbstractDataset[npt.NDArray[np.float32], npt.NDArray[np.float32
     def save(self, data: npt.NDArray[np.float32]) -> None:
         _guard_protected(self._filepath)
         self._filepath.parent.mkdir(parents=True, exist_ok=True)
-        np.save(self._filepath, data.astype(np.float32))
+        # Atomic write: np.save to a .tmp.npy sidecar then rename.
+        tmp = self._filepath.parent / (self._filepath.stem + ".tmp.npy")
+        np.save(tmp, data.astype(np.float32))
+        tmp.replace(self._filepath)
 
     def _exists(self) -> bool:
         return self._filepath.exists()

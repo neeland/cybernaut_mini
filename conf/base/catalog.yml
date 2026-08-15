@@ -79,18 +79,18 @@ merged_documents:
 # ------------------------------------------------------------------ #
 
 # corpus_ingest WRITES this and index_build reads it, so its default must be a
-# generated path. It must never default into data/sample/: that directory holds a
-# committed fixture, and an acquisition run would overwrite it.
-# Sample builds reach the fixture by passing it explicitly —
-# `cybernaut-mini build --input data/sample/documents.jsonl` — which arrives here
-# as the input_path runtime param.
+# generated path. It must never default into data/01_raw/fixtures/: that directory
+# holds committed fixtures, and an acquisition run would overwrite them.
+# Fixture builds reach the slice by passing it explicitly —
+# `cybernaut-mini build --input data/01_raw/fixtures/documents.jsonl` — which
+# arrives here as the input_path runtime param.
 documents:
   type: cybernaut_mini.datasets.JsonlDataset
   filepath: ${runtime_params:input_path,data/03_primary/corpus.jsonl}
 
 judgments:
   type: cybernaut_mini.datasets.JsonlDataset
-  filepath: ${runtime_params:judgments_path,data/sample/judgments.jsonl}
+  filepath: ${runtime_params:judgments_path,data/01_raw/fixtures/judgments.jsonl}
 
 # ------------------------------------------------------------------ #
 # The index                                                           #
@@ -101,7 +101,7 @@ judgments:
 # the evaluation pipeline consumes it.
 shard_index:
   type: cybernaut_mini.datasets.ShardIndexDataset
-  filepath: ${runtime_params:index_path,artifacts/sample}
+  filepath: ${runtime_params:index_path,artifacts/fixture}
 
 # ------------------------------------------------------------------ #
 # 08_reporting                                                        #

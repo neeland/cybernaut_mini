@@ -16,10 +16,10 @@ Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — supports the note
 Assumptions:
     - Catalog paths are relative to the project root, so the helpers chdir there.
       A notebook opened from ``notebooks/`` would otherwise resolve
-      ``data/sample/documents.jsonl`` against the wrong directory.
-    - Building the sample index is cheap (hash embedder, 63 documents, well under a
-      second), so a notebook may build it on demand rather than requiring the reader
-      to have run ``make build-sample`` first.
+      ``data/01_raw/fixtures/documents.jsonl`` against the wrong directory.
+    - Building the fixture index is cheap (hash embedder, ~460 documents, a few
+      seconds), so a notebook may build it on demand rather than requiring the
+      reader to have run ``make build-fixture`` first.
     - Rebuilding is avoided when ``_VALID`` is present, so a notebook run never
       clobbers an index the reader built with different settings.
 
@@ -107,12 +107,12 @@ def run_pipeline(name: str, env: str = "local", **runtime_params: Any) -> dict[s
         return result
 
 
-#: Settings that reproduce ``make build-sample`` (configs/tiny.yaml): the hash
+#: Settings that reproduce ``make build-fixture`` (configs/tiny.yaml): the hash
 #: embedder, so a notebook never needs a model download or network access.
-SAMPLE_BUILD_PARAMS: dict[str, Any] = {
-    "input_path": "data/sample/documents.jsonl",
-    "index_path": "artifacts/sample",
-    "judgments_path": "data/sample/judgments.jsonl",
+FIXTURE_BUILD_PARAMS: dict[str, Any] = {
+    "input_path": "data/01_raw/fixtures/documents.jsonl",
+    "index_path": "artifacts/fixture",
+    "judgments_path": "data/01_raw/fixtures/judgments.jsonl",
     "embedding": {"provider": "hash", "dim": 256},
     "index": {
         "n_shards": 8,
@@ -126,8 +126,8 @@ SAMPLE_BUILD_PARAMS: dict[str, Any] = {
 }
 
 
-def ensure_sample_index(index_path: str = "artifacts/sample") -> Path:
-    """Build the sample index if it is absent, then return its path.
+def ensure_fixture_index(index_path: str = "artifacts/fixture") -> Path:
+    """Build the fixture index if it is absent, then return its path.
 
     ``_VALID`` is written last by the index writer, so its presence means a complete
     index and the build is skipped. That keeps a notebook run from overwriting an
@@ -138,7 +138,7 @@ def ensure_sample_index(index_path: str = "artifacts/sample") -> Path:
     if (target / "_VALID").exists():
         return target
 
-    params = dict(SAMPLE_BUILD_PARAMS)
+    params = dict(FIXTURE_BUILD_PARAMS)
     params["index_path"] = index_path
     run_pipeline("index_build", **params)
     return target

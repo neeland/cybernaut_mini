@@ -8,7 +8,7 @@ are coherent or that hybrid search wins; these notebooks compute whether it is t
 corpus you can rebuild yourself — and report the answer even when it is unflattering.
 
 Every notebook reads through the **Kedro catalog**. None of them opens a data path.
-That is what lets the same notebook run against the 63-document sample and a 100,000-row
+That is what lets the same notebook run against the committed fixture slice and a 100,000-row
 Hugging Face corpus with one argument changed.
 
 ```mermaid
@@ -57,9 +57,9 @@ Any kernel works — plain JupyterLab, VS Code, or the headless executor — bec
 notebook bootstraps its own session:
 
 ```python
-from cybernaut_mini.notebook import kedro_catalog, ensure_sample_index
+from cybernaut_mini.notebook import kedro_catalog, ensure_fixture_index
 
-ensure_sample_index()                 # builds artifacts/sample if absent, never overwrites
+ensure_fixture_index()                # builds artifacts/fixture if absent, never overwrites
 catalog = kedro_catalog()             # the same catalog the pipelines use
 index = catalog.load("shard_index")   # a query-ready LoadedIndex
 ```
@@ -95,7 +95,7 @@ CYBERNAUT_LIVE_API=1 scripts/lab.sh
 ## A note on the findings
 
 Two of the four headline findings above are negative, and they are stated plainly on
-purpose. The sample corpus is 63 short, clean, English documents with 12 graded queries
+purpose. The fixture corpus is real MIRACL passages and CC-News articles with 25 graded queries
 — a good instrument for demonstrating *mechanisms* and a poor one for *choosing a
 retrieval strategy*. To draw real conclusions, build a real index:
 

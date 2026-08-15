@@ -128,7 +128,7 @@ row is an independent, testable component.
 | **Compressors** | Trained compression dictionary | Zstandard dictionary trained on shard text (`zstd --train`) | Partial — `routing.py` uses generic zlib, no trained dict |
 | **Bloom filters** | O(1) "does this phrase exist here?" | Bloom filter over shard phrases/n-grams | **NOT BUILT** — approximated by keyword+graph coverage |
 | **Queries** | Example queries aligned to shard | LLM-generated from shard content; used for routing + eval | **NOT BUILT** |
-| **Evals** | Gold-standard set per shard | Query→relevant-doc judgments | Partial — global judgments only (`data/sample/judgments.jsonl`) |
+| **Evals** | Gold-standard set per shard | Query→relevant-doc judgments | Partial — global judgments only (`data/01_raw/fixtures/judgments.jsonl`) |
 | **Rerankers** | Fine-tuned neural reranking | Cross-encoder (`bge-reranker-v2-m3` class) | **NOT BUILT** |
 | **Write-ahead log** | Pending mutations before compaction | Append-only log + periodic merge into the shard | **NOT BUILT** |
 
@@ -645,7 +645,7 @@ after.
 - **Judgments format:** `(query_id, doc_id, relevance_grade)` in JSONL.
 
 *Repo status:* built — `evals.py` (`ndcg_at_k`, `recall_at_k`, `mrr_at_k`, `ModeMetrics`,
-`evaluate`), `data/sample/judgments.jsonl`.
+`evaluate`), `data/01_raw/fixtures/judgments.jsonl`.
 
 ### D2. Determinism and reproducibility
 

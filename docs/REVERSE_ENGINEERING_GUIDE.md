@@ -134,7 +134,7 @@ shards, ~100 results.
 9. **[disclosed]** Stage 8: broadcast to top 10–30 shards; per shard BM25 + vector, RRF,
    Aho-Corasick (`pyahocorasick`) intent match; group by doc id; snippet; return ~100.
 10. **[inferred]** Evaluate with gold judgments (nDCG/recall@k) — mirrors per-shard "Evals"
-    (the repo's `evals.py` / `data/sample/judgments.jsonl`).
+    (the repo's `evals.py` / `data/01_raw/fixtures/judgments.jsonl`).
 
 ### Gaps
 

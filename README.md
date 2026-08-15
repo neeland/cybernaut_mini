@@ -45,8 +45,8 @@ installed.
 | Embedding | Shard-specific LLMs | Hash embedder (offline) or e5-small |
 | Similarity | Bayesian dense similarity | Exact cosine, float32 |
 | Search tree | LLM-guided MCTS | Staged beam search with UCT budget allocation (honestly not full MCTS) |
-| Judge / generator | LLM-based | Heuristic (token coverage, Jaccard) — 0 LLM calls |
-| Reward max | Unspecified | 0.95 by design (weights 0.45+0.20+0.20+0.10−0.05); 1.0 is unreachable |
+| Judge / generator | LLM-based | Heuristic by default (0 LLM calls); `configs/neural.yaml` swaps in a HF cross-encoder judge + Qwen query rewriter on MPS |
+| Reward max | Unspecified | 1.0 (weights 0.45+0.20+0.20+0.10+0.05·diversity sum to 1.0) |
 | Retrieval budget | Unspecified | 5+9+4 = 18 calls max |
 | Stage schedule | Unspecified | Explore 5, Refine 9, Exploit 4 |
 | Entities | Production NER | Regex fallback (spaCy optional via `[nlp]`) |
@@ -131,39 +131,37 @@ reproducibility anchor.
 # Install (no GPU, no downloads)
 uv sync
 
-# Generate sample corpus (63 docs, 12 graded judgments)
-uv run python scripts/generate_sample_corpus.py
-
-# Build the sample index (hash embedder, 8 shards, ~0.3 s)
+# Build the fixture index — real MIRACL passages + CC-News docs,
+# hash embedder, 8 shards. data/01_raw/fixtures/ is committed; no download needed.
 uv run cybernaut-mini build \
-  --input data/sample/documents.jsonl \
-  --index artifacts/sample \
+  --input data/01_raw/fixtures/documents.jsonl \
+  --index artifacts/fixture \
   --config configs/tiny.yaml \
   --offline
 
 # Inspect shards
-uv run cybernaut-mini inspect-shards --index artifacts/sample
+uv run cybernaut-mini inspect-shards --index artifacts/fixture
 
 # Hybrid search
 uv run cybernaut-mini search \
-  --index artifacts/sample \
-  --question "CRISPR screening immune pathways T-cell" \
+  --index artifacts/fixture \
+  --question "Is Creole a pidgin of French?" \
   --mode hybrid \
   --offline
 
 # Agent search (three-stage beam search, <=18 retrieval calls, 0 LLM calls)
 uv run cybernaut-mini search \
-  --index artifacts/sample \
-  --question "transformer scaling laws language model" \
+  --index artifacts/fixture \
+  --question "What percentage of the Earth's atmosphere is oxygen?" \
   --mode agent \
   --offline \
   --config configs/tiny.yaml \
   --trace-out run.json
 
-# Evaluate all four modes
+# Evaluate all four modes against the committed MIRACL judgments
 uv run cybernaut-mini eval \
-  --index artifacts/sample \
-  --judgments data/sample/judgments.jsonl \
+  --index artifacts/fixture \
+  --judgments data/01_raw/fixtures/judgments.jsonl \
   --config configs/tiny.yaml \
   --offline
 ```
@@ -173,11 +171,11 @@ uv run cybernaut-mini eval \
 ```bash
 # Build via Kedro (same artifacts as the CLI build above)
 uv run kedro run --pipeline index_build \
-  --params "input_path=data/sample/documents.jsonl,index_path=artifacts/sample,seed=42,offline=true"
+  --params "input_path=data/01_raw/fixtures/documents.jsonl,index_path=artifacts/fixture,seed=42,offline=true"
 
 # Evaluate via Kedro
 uv run kedro run --pipeline evaluation \
-  --params "index_path=artifacts/sample,judgments_path=data/sample/judgments.jsonl,offline=true"
+  --params "index_path=artifacts/fixture,judgments_path=data/01_raw/fixtures/judgments.jsonl,offline=true"
 ```
 
 ---
@@ -206,9 +204,9 @@ artifacts/<index>/
       ...                    # Stored beside the manifest, not inline in it, and read
                              # one shard at a time via LoadedIndex.shard_artifacts().
 
-data/sample/
-  documents.jsonl      # 63 synthetic docs across 6 topics, seed 42
-  judgments.jsonl      # 12 graded queries (grades 1-2), referencing real doc IDs
+data/01_raw/fixtures/
+  documents.jsonl      # real MIRACL passages (mir-) + CC-News articles (ccn-)
+  judgments.jsonl      # 25 MIRACL en-dev queries with graded qrels (grade 0/1)
 ```
 
 All JSON artifacts are written through `canonical_dumps` (sorted keys, compact
@@ -284,8 +282,8 @@ Config: `configs/tiny.yaml` (hash embedder, 8 shards, seed 42)
   hits/shard. Node 6 is selected as terminal winner (highest mean value across
   all nodes).
 - **Reward formula**: `0.45 x relevance + 0.20 x coverage + 0.20 x dense_norm
-  + 0.10 x lexical_norm - 0.05 x redundancy`. Weights intentionally sum to 0.95;
-  a perfect score of 1.0 is unreachable by design.
+  + 0.10 x lexical_norm + 0.05 x (1 - redundancy)`. Weights sum to 1.0, so a
+  perfect, non-redundant result set scores exactly 1.0.
 - **Budget**: 6 retrieval calls total, well within the 18-call limit (5+9+4).
 - **UCT**: staged beam search, not full MCTS. The "MCTS" label in the NOSIBLE
   post inspired the design, but the implementation is a staged beam with UCT
@@ -293,9 +291,9 @@ Config: `configs/tiny.yaml` (hash embedder, 8 shards, seed 42)
 
 ---
 
-## Evaluation results (sample corpus, offline, seed 42)
+## Evaluation results (fixture corpus, offline, seed 42)
 
-Run: `uv run cybernaut-mini eval --index artifacts/sample --judgments data/sample/judgments.jsonl --config configs/tiny.yaml --offline`
+Run: `uv run cybernaut-mini eval --index artifacts/fixture --judgments data/01_raw/fixtures/judgments.jsonl --config configs/tiny.yaml --offline`
 
 ```
 Mode           Recall@5    Recall@10       MRR@10      nDCG@10    Ret calls    LLM calls   Wall (s) (informational)
@@ -322,7 +320,9 @@ query add overhead without proportional quality gain. On a real-scale index
 
 | Decision | Value | Rationale |
 |---|---|---|
-| Reward weights | 0.45/0.20/0.20/0.10/-0.05 | Sum to 0.95; perfect score unreachable by design |
+| Reward weights | 0.45/0.20/0.20/0.10/0.05 (diversity = 1 − redundancy) | Sum to 1.0; a perfect non-redundant result set scores 1.0 |
+| Agent judge (opt-in) | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` on MPS | Real (question, doc) relevance; multilingual to match CC-News + MIRACL |
+| Agent generator (opt-in) | `Qwen/Qwen2.5-0.5B-Instruct` on MPS, greedy | Real query rewrites from search state; heuristic fallback on bad output |
 | Retrieval-call budget | 5+9+4 = 18 | Stage schedule from spec resolution #1 |
 | Default embedder | `model2vec` (`potion-multilingual-128M`) | Semantic vectors with no torch; shard k-means needs a meaningful space |
 | Hash embedder dim | 256 (tiny: 256, tests: 64) | `hashlib.blake2b` token+char-trigram buckets, L2-norm |

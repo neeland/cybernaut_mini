@@ -438,15 +438,12 @@ EOF
   `make check`          ruff + mypy --strict + pytest
   `make doctor`         verify the container end to end
 
-  `uv run python scripts/generate_sample_corpus.py`
-      63 docs, 12 graded judgments
-
   `cybernaut-mini build      --config configs/tiny.yaml --offline`
-      8 shards, hash embedder, ~0.3 s
+      8 shards, hash embedder; fixture slice committed at data/01_raw/fixtures/
 
-  `cybernaut-mini inspect-shards --index artifacts/sample`
+  `cybernaut-mini inspect-shards --index artifacts/fixture`
   `cybernaut-mini search  --mode hybrid|agent --trace-out run.json`
-  `cybernaut-mini eval    --judgments data/sample/judgments.jsonl`
+  `cybernaut-mini eval    --judgments data/01_raw/fixtures/judgments.jsonl`
 
   `make ingest` · `make build-prod` · `make eval-pipeline` · `make viz`
       the same work through Kedro; `build-prod` *aborts* unless

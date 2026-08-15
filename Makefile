@@ -1,5 +1,5 @@
 .PHONY: install install-mac install-prod env accel test lint typecheck check \
-	build-sample search-sample eval-sample \
+	build-fixture search-fixture eval-fixture \
 	ingest ingest-prod build-prod eval-pipeline viz pipelines \
 	notebooks lab entire doctor
 
@@ -50,22 +50,22 @@ typecheck:
 
 check: lint typecheck test
 
-build-sample:
+build-fixture:
 	uv run cybernaut-mini build \
-		--input data/sample/documents.jsonl \
-		--index artifacts/sample \
+		--input data/01_raw/fixtures/documents.jsonl \
+		--index artifacts/fixture \
 		--config configs/tiny.yaml
 
-search-sample:
+search-fixture:
 	uv run cybernaut-mini search \
-		--index artifacts/sample \
+		--index artifacts/fixture \
 		--mode hybrid \
 		--question "What links gut bacteria to immune response?"
 
-eval-sample:
+eval-fixture:
 	uv run cybernaut-mini eval \
-		--index artifacts/sample \
-		--judgments data/sample/judgments.jsonl
+		--index artifacts/fixture \
+		--judgments data/01_raw/fixtures/judgments.jsonl
 
 # ------------------------------------------------------------------ #
 # Kedro pipelines                                                     #
@@ -92,7 +92,7 @@ build-prod:
 # Evaluation through the catalog; writes data/08_reporting/eval_report.json.
 eval-pipeline:
 	uv run kedro run --pipeline evaluation --params \
-		index_path=artifacts/sample,judgments_path=data/sample/judgments.jsonl,embedding.provider=hash,embedding.dim=256,offline=true
+		index_path=artifacts/fixture,judgments_path=data/01_raw/fixtures/judgments.jsonl,embedding.provider=hash,embedding.dim=256,offline=true
 
 viz:
 	uv run kedro viz
