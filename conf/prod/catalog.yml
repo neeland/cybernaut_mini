@@ -85,6 +85,51 @@ shard_index:
   filepath: ${runtime_params:index_path,artifacts/ccnews-miracl-200k}
 
 # ------------------------------------------------------------------ #
+# index_build intermediate checkpoints                                #
+# ------------------------------------------------------------------ #
+# Every inter-node artifact is persisted so `kedro run --from-nodes=X`
+# can restart mid-DAG after a crash.  Resume workflow (per stage):
+#   ingest crash  → kedro run --env prod --pipeline index_build --from-nodes=embed_documents
+#   embed crash   → re-run index_build (embed node auto-resumes via chunk cache in
+#                    data/06_models/embed_cache/); or skip straight to sharding:
+#                    kedro run --env prod --pipeline index_build --from-nodes=shard
+#   shard crash   → kedro run --env prod --pipeline index_build --from-nodes=build_manifests
+#   manifest crash→ kedro run --env prod --pipeline index_build --from-nodes=build_index_payload
+#   eval crash    → kedro run --env prod --pipeline evaluation
+
+raw_documents:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/02_intermediate/ccnews_miracl_raw_documents.jsonl
+
+text_result:
+  type: cybernaut_mini.datasets.CanonicalJsonDataset
+  filepath: data/02_intermediate/ccnews_miracl_text_result.json
+
+vectors_list:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/06_models/ccnews_miracl_vectors_list.jsonl
+
+shard_result:
+  type: cybernaut_mini.datasets.CanonicalJsonDataset
+  filepath: data/06_models/ccnews_miracl_shard_result.json
+
+manifests_list:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/02_intermediate/ccnews_miracl_manifests_list.jsonl
+
+# ------------------------------------------------------------------ #
+# evaluation pipeline checkpoints                                     #
+# ------------------------------------------------------------------ #
+
+judgments_list:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/02_intermediate/ccnews_miracl_judgments_list.jsonl
+
+metrics_list:
+  type: cybernaut_mini.datasets.JsonlDataset
+  filepath: data/08_reporting/ccnews_miracl_metrics_list.jsonl
+
+# ------------------------------------------------------------------ #
 # MIRACL en-dev judgment pipeline (task #5 / M1.4)                   #
 # ------------------------------------------------------------------ #
 # Run standalone: kedro run --env prod --pipeline judgment_ingest

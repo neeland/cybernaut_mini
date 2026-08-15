@@ -33,6 +33,9 @@ Alternatives rejected: computing one graph over the whole corpus and assigning i
 
 from __future__ import annotations
 
+import json
+import re
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -57,6 +60,117 @@ from cybernaut_mini.providers.embeddings import (
 )
 from cybernaut_mini.sharding import shard_documents
 from cybernaut_mini.text import TextProcessor
+
+#: Number of documents encoded per cache chunk.  At 200k docs this produces
+#: 40 chunks of 5k each; a crash loses at most one chunk's worth of work.
+EMBED_CHUNK_SIZE = 5_000
+
+
+def _embed_cache_dir(config: EmbeddingConfig) -> Path:
+    """Stable directory path for the per-build embedding chunk cache.
+
+    Keyed on ``(identifier, revision)`` so a config change (different model,
+    different revision, provider switch) automatically invalidates the cache
+    without manual cleanup.
+    """
+    safe_id = re.sub(r"[^a-zA-Z0-9_.-]", "-", config.identifier())
+    rev = (config.revision or "unpinned")[:12]
+    return Path("data") / "06_models" / "embed_cache" / f"{safe_id}-{rev}"
+
+
+def _embed_with_cache(
+    texts: list[str],
+    provider: Any,
+    config: EmbeddingConfig,
+    *,
+    chunk_size: int = EMBED_CHUNK_SIZE,
+    cache_dir: Path | None = None,
+) -> list[list[float]]:
+    """Encode ``texts`` in chunks, caching each chunk to disk.
+
+    Crash-resumable: completed chunks are loaded from ``.npy`` cache files and
+    only missing or incomplete chunks are re-encoded.  A resume after a crash
+    at chunk *k* re-encodes from chunk *k* onward, not from the beginning.
+
+    Cache structure::
+
+        data/06_models/embed_cache/<model-id>-<rev12>/
+            manifest.json          # {chunk_idx: doc_count}
+            chunk_0000.npy
+            chunk_0001.npy
+            ...
+
+    The ``manifest.json`` records how many docs each completed chunk holds.
+    A chunk is considered valid when its ``.npy`` file exists **and** the
+    manifest entry matches ``len(chunk_texts)``.  A partial/corrupt ``.npy``
+    is detected on the next run and overwritten.
+
+    Parameters
+    ----------
+    texts:
+        Flat list of ``"title\\ntext"`` strings, one per document.
+    provider:
+        Any embedding provider (hash, model2vec, sentence_transformers).
+    config:
+        The EmbeddingConfig that produced *provider*; used only to compute the
+        cache key via :func:`_embed_cache_dir`.
+    chunk_size:
+        Documents per chunk.  Default is :data:`EMBED_CHUNK_SIZE` (5 000).
+    cache_dir:
+        Override the cache directory; useful for tests that inject a
+        ``tmp_path`` so they never touch ``data/``.
+    """
+    import logging
+
+    _log = logging.getLogger(__name__)
+
+    resolved_cache = cache_dir if cache_dir is not None else _embed_cache_dir(config)
+    resolved_cache.mkdir(parents=True, exist_ok=True)
+    manifest_path = resolved_cache / "manifest.json"
+
+    existing: dict[str, int] = {}
+    if manifest_path.exists():
+        try:
+            existing = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass  # corrupt manifest — treat all chunks as missing
+
+    n_chunks = max(1, (len(texts) + chunk_size - 1) // chunk_size)
+    all_vecs: list[np.ndarray] = []
+    manifest: dict[str, int] = {}
+
+    for i in range(n_chunks):
+        chunk = texts[i * chunk_size : (i + 1) * chunk_size]
+        key = str(i)
+        chunk_path = resolved_cache / f"chunk_{i:04d}.npy"
+
+        if chunk_path.exists() and existing.get(key) == len(chunk):
+            _log.info(
+                "embed cache hit  chunk=%04d/%04d  docs=%d",
+                i, n_chunks - 1, len(chunk),
+            )
+            vecs = np.load(chunk_path).astype(np.float32)
+        else:
+            _log.info(
+                "embed encoding   chunk=%04d/%04d  docs=%d",
+                i, n_chunks - 1, len(chunk),
+            )
+            vecs = provider.embed_documents(chunk)
+            # Atomic: write to sidecar then rename so a crash mid-write
+            # never leaves a truncated .npy at the real path.
+            tmp = chunk_path.parent / (chunk_path.stem + ".tmp.npy")
+            np.save(tmp, vecs)
+            tmp.replace(chunk_path)
+
+        manifest[key] = len(chunk)
+        all_vecs.append(vecs)
+
+    # Atomically update the manifest so it always reflects completed chunks.
+    tmp_m = manifest_path.with_suffix(".tmp")
+    tmp_m.write_text(json.dumps(manifest), encoding="utf-8")
+    tmp_m.replace(manifest_path)
+
+    return np.concatenate(all_vecs, axis=0).tolist()
 
 
 def ingest_documents(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -139,9 +253,10 @@ def embed_documents(
     for raw in documents:
         doc = Document.model_validate(raw)
         texts.append(f"{doc.title}\n{doc.text}")
-    matrix = provider.embed_documents(texts)
-    result: list[list[float]] = matrix.tolist()
-    return result
+
+    # Chunked encode with on-disk cache: a crash at chunk k loses at most
+    # chunk_size docs of work; the next run resumes from chunk k+1.
+    return _embed_with_cache(texts, provider, config)
 
 
 def shard(

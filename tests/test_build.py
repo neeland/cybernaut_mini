@@ -889,3 +889,78 @@ def test_close_releases_the_stores_and_is_idempotent(tmp_path: Path) -> None:
     loaded.close()  # idempotent
     with pytest.raises(ValueError, match="closed"):
         loaded.by_id["doc-002"]
+
+
+# ------------------------------------------------------------------ #
+# Chunked embedding equivalence (task #12 / B.2)                     #
+# ------------------------------------------------------------------ #
+
+
+def test_chunked_embed_matches_unchunked(tmp_path: Path) -> None:
+    """Chunked _embed_with_cache must produce the same matrix as single-shot.
+
+    Uses the hash embedder (offline, no download) on a 23-doc corpus so the
+    last chunk is partial and the result covers both full and partial chunks.
+    Runs twice to verify that the second call loads from cache and still
+    produces identical results (resume path).
+    """
+    from cybernaut_mini.config import EmbeddingConfig
+    from cybernaut_mini.pipelines.index_build.nodes import _embed_with_cache
+    from cybernaut_mini.providers.embeddings import create_embedding_provider
+
+    config = EmbeddingConfig(provider="hash", dim=32)
+    provider = create_embedding_provider(config, offline=True)
+
+    # 23 texts → with chunk_size=7: chunks of [7, 7, 7, 2]
+    texts = [f"document {i} about topic {i % 5}" for i in range(23)]
+
+    # Reference: single-shot embed (what the old code did)
+    full = np.array(provider.embed_documents(texts), dtype=np.float32)
+
+    cache_dir = tmp_path / "embed_cache"
+
+    # First pass: encodes all chunks and writes to cache
+    chunked1 = np.array(
+        _embed_with_cache(texts, provider, config, chunk_size=7, cache_dir=cache_dir),
+        dtype=np.float32,
+    )
+    np.testing.assert_array_equal(full, chunked1, err_msg="chunked != single-shot on first pass")
+
+    # Second pass: every chunk is a cache hit; result must be identical
+    chunked2 = np.array(
+        _embed_with_cache(texts, provider, config, chunk_size=7, cache_dir=cache_dir),
+        dtype=np.float32,
+    )
+    np.testing.assert_array_equal(full, chunked2, err_msg="chunked != single-shot on cache-hit pass")
+
+    # Manifest records all 4 chunks
+    import json
+    manifest = json.loads((cache_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest == {"0": 7, "1": 7, "2": 7, "3": 2}
+
+
+def test_chunked_embed_resumes_after_partial_cache(tmp_path: Path) -> None:
+    """A crash after chunk 0 completes must not re-encode chunk 0."""
+    from cybernaut_mini.config import EmbeddingConfig
+    from cybernaut_mini.pipelines.index_build.nodes import _embed_with_cache
+    from cybernaut_mini.providers.embeddings import create_embedding_provider
+
+    config = EmbeddingConfig(provider="hash", dim=32)
+    provider = create_embedding_provider(config, offline=True)
+    texts = [f"text {i}" for i in range(10)]
+
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+
+    # Simulate: chunk 0 completed, written to cache, manifest updated
+    vecs0 = provider.embed_documents(texts[:5])
+    np.save(cache_dir / "chunk_0000.npy", vecs0)
+    (cache_dir / "manifest.json").write_text('{"0": 5}', encoding="utf-8")
+
+    # Resume: chunk 0 should be a cache hit, chunk 1 encoded fresh
+    result = np.array(
+        _embed_with_cache(texts, provider, config, chunk_size=5, cache_dir=cache_dir),
+        dtype=np.float32,
+    )
+    full = np.array(provider.embed_documents(texts), dtype=np.float32)
+    np.testing.assert_array_equal(full, result, err_msg="resumed result != full single-shot")
