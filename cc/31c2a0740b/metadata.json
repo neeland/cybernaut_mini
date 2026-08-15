@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "cc31c2a0740b",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "conf/prod/catalog.yml",
+    "src/cybernaut_mini/pipelines/index_build/nodes.py",
+    "tests/test_build.py"
+  ],
+  "sessions": [
+    {
+      "metadata": "/cc/31c2a0740b/0/metadata.json",
+      "transcript": "/cc/31c2a0740b/0/full.jsonl",
+      "compact_transcript": "/cc/31c2a0740b/0/transcript.jsonl",
+      "content_hash": "/cc/31c2a0740b/0/content_hash.txt",
+      "prompt": "/cc/31c2a0740b/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1832,
+    "cache_creation_tokens": 1496500,
+    "cache_read_tokens": 28523007,
+    "output_tokens": 208109,
+    "api_call_count": 298
+  }
+}
