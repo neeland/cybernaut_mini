@@ -175,7 +175,11 @@ class SentenceTransformersEmbedder:
     """
 
     def __init__(
-        self, model_name: str, revision: str | None = None, device: str = "auto"
+        self,
+        model_name: str,
+        revision: str | None = None,
+        device: str = "auto",
+        batch_size: int = 32,
     ) -> None:
         try:
             from sentence_transformers import SentenceTransformer
@@ -198,6 +202,7 @@ class SentenceTransformersEmbedder:
         # the choice is inspectable (``self.device``) and so an unavailable request
         # degrades to CPU instead of raising mid-build.
         self._device = resolve_device(device)  # type: ignore[arg-type]
+        self._batch_size = batch_size
         self._model = SentenceTransformer(
             model_name,
             revision=revision,
@@ -221,7 +226,12 @@ class SentenceTransformersEmbedder:
 
     def _embed(self, texts: list[str], prefix: str) -> FloatArray:
         prefixed = [f"{prefix}{text}" for text in texts] if self._is_e5 else texts
-        vectors = self._model.encode(prefixed, convert_to_numpy=True, show_progress_bar=False)
+        vectors = self._model.encode(
+            prefixed,
+            batch_size=self._batch_size,
+            convert_to_numpy=True,
+            show_progress_bar=False,
+        )
         return l2_normalize(np.asarray(vectors, dtype=np.float32))
 
     def embed_documents(self, texts: list[str]) -> FloatArray:
@@ -244,4 +254,6 @@ def create_embedding_provider(
         raise ConfigError(msg)
     if config.provider == "model2vec":
         return Model2VecEmbedder(config.model_name, revision=config.revision)
-    return SentenceTransformersEmbedder(config.model_name, revision=config.revision)
+    return SentenceTransformersEmbedder(
+        config.model_name, revision=config.revision, batch_size=config.batch_size
+    )

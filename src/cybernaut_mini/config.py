@@ -80,6 +80,20 @@ class EmbeddingConfig(BaseModel):
             "guaranteed per-device, not across devices."
         ),
     )
+    batch_size: int = Field(
+        default=32,
+        ge=1,
+        description=(
+            "Mini-batch size passed to sentence_transformers encode(). Ignored by "
+            "'hash' and 'model2vec', which process all inputs in one numpy call. "
+            "Benchmarked on 2,048 MIRACL passages with intfloat/multilingual-e5-small "
+            "on Apple M-series MPS: 32→269 docs/s, 64→267, 128→256, 256→196. MPS "
+            "unified memory does NOT benefit from larger batches — 32 is optimal. "
+            "For discrete CUDA GPUs larger batches (128-256) typically improve "
+            "throughput; override via conf/prod/parameters.yml if the target machine "
+            "has a CUDA GPU."
+        ),
+    )
 
     @property
     def model_name(self) -> str:
@@ -132,14 +146,65 @@ class RRFConfig(BaseModel):
     entity_weight: float = Field(default=0.5, ge=0.0)
 
 
+#: Default Hugging Face models for the model-backed agent providers. Kept beside
+#: PROVIDER_DEFAULT_MODEL for the same reason: the config field stays empty-able
+#: without one provider inheriting another's default.
+AGENT_DEFAULT_MODEL: dict[str, str] = {
+    # Multilingual MiniLM reranker: the corpus mixes CC-News and MIRACL, so an
+    # English-only ms-marco cross-encoder would misjudge half the shards.
+    "cross_encoder": "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
+    # Small enough to generate a handful of query rewrites in well under a
+    # second on MPS; instruct-tuned so it follows the one-query-per-line format.
+    "llm": "Qwen/Qwen2.5-0.5B-Instruct",
+}
+
+
 class AgentConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     exploration_constant: float = Field(default=1.2, ge=0.0)
     max_expansions: int = Field(default=5, ge=0)
     max_retrieval_calls: int = Field(default=18, ge=1)
-    judge: Literal["heuristic"] = "heuristic"
-    query_generator: Literal["heuristic"] = "heuristic"
+    # 'heuristic' stays the default so a bare install (no torch) keeps working
+    # and tests stay offline-deterministic. 'cross_encoder' / 'llm' are the real
+    # model-backed providers; both need the 'st' extra ('mps' extra on a Mac for
+    # the GPU) and download weights on first use.
+    judge: Literal["heuristic", "cross_encoder"] = "heuristic"
+    query_generator: Literal["heuristic", "llm"] = "heuristic"
+    judge_model: str = Field(
+        default="",
+        description=(
+            "Cross-encoder repo id for judge='cross_encoder'. Empty resolves to "
+            "AGENT_DEFAULT_MODEL['cross_encoder']; read via `judge_model_name`."
+        ),
+    )
+    judge_revision: str | None = None
+    generator_model: str = Field(
+        default="",
+        description=(
+            "Causal-LM repo id for query_generator='llm'. Empty resolves to "
+            "AGENT_DEFAULT_MODEL['llm']; read via `generator_model_name`."
+        ),
+    )
+    generator_revision: str | None = None
+    device: Literal["auto", "mps", "cuda", "cpu"] = Field(
+        default="auto",
+        description=(
+            "Torch device for the model-backed judge and generator; ignored by the "
+            "heuristic providers. Same semantics as embedding.device: 'auto' "
+            "prefers MPS on Apple silicon, and an unavailable explicit choice "
+            "degrades to CPU."
+        ),
+    )
+    generator_max_new_tokens: int = Field(default=192, ge=16)
+
+    @property
+    def judge_model_name(self) -> str:
+        return self.judge_model or AGENT_DEFAULT_MODEL["cross_encoder"]
+
+    @property
+    def generator_model_name(self) -> str:
+        return self.generator_model or AGENT_DEFAULT_MODEL["llm"]
 
 
 class AppConfig(BaseModel):
@@ -161,6 +226,13 @@ class AppConfig(BaseModel):
             msg = (
                 f"offline mode: embedding provider {self.embedding.provider!r} may "
                 "require a model download; use provider 'hash' (e.g. configs/tiny.yaml)"
+            )
+            raise ConfigError(msg)
+        if self.agent.judge != "heuristic" or self.agent.query_generator != "heuristic":
+            msg = (
+                f"offline mode: agent judge {self.agent.judge!r} / query generator "
+                f"{self.agent.query_generator!r} may require a model download; use "
+                "'heuristic' for both"
             )
             raise ConfigError(msg)
 

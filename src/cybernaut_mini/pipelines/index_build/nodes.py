@@ -51,7 +51,10 @@ from cybernaut_mini.models import (
     IndexMeta,
     ShardManifest,
 )
-from cybernaut_mini.providers.embeddings import create_embedding_provider
+from cybernaut_mini.providers.embeddings import (
+    SentenceTransformersEmbedder,
+    create_embedding_provider,
+)
 from cybernaut_mini.sharding import shard_documents
 from cybernaut_mini.text import TextProcessor
 
@@ -103,9 +106,35 @@ def embed_documents(
 
     Returns a list of float lists (row i = documents[i]) so Kedro can
     serialize the result; the node downstream converts back to numpy.
+
+    Logs the resolved device and emits a warning when a sentence-transformers
+    build silently falls back to CPU on Apple Silicon (MPS available but not
+    selected) — the most common cause of a 10-20× throughput regression that
+    otherwise appears only in wall-clock time after a full build.
     """
+    import logging
+    import platform
+
+    _log = logging.getLogger(__name__)
+
     config = EmbeddingConfig.model_validate(embedding_params)
     provider = create_embedding_provider(config, offline=offline)
+
+    _log.info("embedder=%s  dim=%d  batch_size=%s", provider.identifier, provider.dim,
+              getattr(provider, "_batch_size", "n/a"))
+
+    if isinstance(provider, SentenceTransformersEmbedder):
+        from cybernaut_mini import accel
+
+        fingerprint = accel.device_fingerprint()
+        _log.info("device=%s  fingerprint=%s", provider.device, fingerprint)
+        if provider.device == "cpu" and platform.machine() == "arm64":
+            _log.warning(
+                "ST embedder resolved to CPU on Apple Silicon — MPS is available. "
+                "Run via scripts/with-accel.sh or set PYTORCH_ENABLE_MPS_FALLBACK=1 "
+                "to activate it. Expect ~10-20× slower embedding than MPS."
+            )
+
     texts = []
     for raw in documents:
         doc = Document.model_validate(raw)

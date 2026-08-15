@@ -10,7 +10,6 @@ from dataclasses import dataclass
 
 import numpy as np
 import numpy.typing as npt
-from sklearn.cluster import MiniBatchKMeans
 
 FloatArray = npt.NDArray[np.float32]
 
@@ -58,6 +57,10 @@ def shard_documents(
     ShardingResult with integer labels (one per document) and centroids array
     (n_shards, dim).
     """
+    # Deferred: sklearn pulls in scipy + pandas (~3s), and this module is imported
+    # by every Kedro session via the pipeline registry — only a build should pay.
+    from sklearn.cluster import MiniBatchKMeans
+
     n_docs, _dim = vectors.shape
 
     if n_shards < 1:
@@ -67,11 +70,15 @@ def shard_documents(
         msg = f"n_shards ({n_shards}) > n_docs ({n_docs})"
         raise ValueError(msg)
 
+    # batch_size=1024 is the sklearn default and 2× faster than 256 at 200k×384
+    # (5.4 s → 2.7 s on Apple M-series; see .omc/research/kedro-optimisation.md).
+    # The sklearn recommendation is batch_size ≥ n_clusters × 3 (768 at 256 shards),
+    # so 256 was also below the convergence-quality floor — 1024 fixes both.
     kmeans = MiniBatchKMeans(
         n_clusters=n_shards,
         random_state=seed,
         n_init=3,
-        batch_size=256,
+        batch_size=1024,
     )
     raw_labels: list[int] = kmeans.fit_predict(vectors).tolist()
 
