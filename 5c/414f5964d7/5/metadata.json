@@ -1,0 +1,41 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "5c414f5964d7",
+  "session_id": "f685d379-b9f6-4be3-b325-c5c3c3f35fbf",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-15T08:48:03.823995Z",
+  "branch": "main",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "Makefile",
+    "README.md",
+    "conf/base/catalog.yml",
+    "data/ATTRIBUTION.md",
+    "data/LICENSE-DATA",
+    "scripts/pull_fixture_slice.py",
+    "src/cybernaut_mini/datasets.py",
+    "src/cybernaut_mini/notebook.py",
+    "tests/test_datasets.py",
+    "tests/test_notebooks.py"
+  ],
+  "agent": "Claude Code",
+  "model": "",
+  "turn_id": "e262b85b9db8",
+  "checkpoint_transcript_start": 1510,
+  "transcript_lines_at_start": 1510,
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-15T08:48:03.822334Z",
+    "agent_lines": 506,
+    "agent_removed": 74,
+    "human_added": 758,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1264,
+    "total_lines_changed": 1949,
+    "agent_percentage": 29.758850692662904,
+    "metric_version": 2
+  }
+}
