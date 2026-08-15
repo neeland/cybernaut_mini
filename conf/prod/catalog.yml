@@ -105,9 +105,11 @@ text_result:
   type: cybernaut_mini.datasets.CanonicalJsonDataset
   filepath: data/02_intermediate/ccnews_miracl_text_result.json
 
-vectors_list:
-  type: cybernaut_mini.datasets.JsonlDataset
-  filepath: data/06_models/ccnews_miracl_vectors_list.jsonl
+# vectors_list intentionally MemoryDataset (not persisted): the embed_with_cache
+# chunk cache in data/06_models/embed_cache/ handles crash recovery — a resume
+# re-runs the embed node, which loads all completed chunks from cache as fast
+# reads, then re-shards from the assembled matrix. Skipping the JSONL checkpoint
+# saves ~600 MB of the available disk budget.
 
 shard_result:
   type: cybernaut_mini.datasets.CanonicalJsonDataset
