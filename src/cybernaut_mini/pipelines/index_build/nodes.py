@@ -240,7 +240,7 @@ def embed_documents(
     if isinstance(provider, SentenceTransformersEmbedder):
         from cybernaut_mini import accel
 
-        fingerprint = accel.device_fingerprint()
+        fingerprint = accel.device_fingerprint(provider.device)
         _log.info("device=%s  fingerprint=%s", provider.device, fingerprint)
         if provider.device == "cpu" and platform.machine() == "arm64":
             _log.warning(
