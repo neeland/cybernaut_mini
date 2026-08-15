@@ -3,7 +3,7 @@
   "checkpoint_id": "5c414f5964d7",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 12,
+  "checkpoints_count": 14,
   "files_touched": [
     ".devcontainer/post-create.sh",
     ".gitignore",
@@ -71,6 +71,13 @@
     {
       "metadata": "/5c/414f5964d7/5/metadata.json",
       "prompt": ""
+    },
+    {
+      "metadata": "/5c/414f5964d7/6/metadata.json",
+      "transcript": "/5c/414f5964d7/6/full.jsonl",
+      "compact_transcript": "/5c/414f5964d7/6/transcript.jsonl",
+      "content_hash": "/5c/414f5964d7/6/content_hash.txt",
+      "prompt": "/5c/414f5964d7/6/prompt.txt"
     }
   ],
   "token_usage": {

@@ -1,0 +1,21 @@
+"Honesty note, from the README itself:
+  "Staged beam search with UCT budget allocation (honestly not full
+  MCTS)." There is no rollout and no backpropagation to a root value.
+
+  Judge and generator are heuristic — token coverage and Jaccard.
+  Zero LLM calls on the default path. Reward maxes at 0.95 by
+  construction (0.45+0.20+0.20+0.10−0.05); 1.0 is unreachable." this sounds too toy. let's make it more like real nossible. let's use the mps here and some huggingface models
+
+---
+
+<task-notification>
+<task-id>bjid8di4i</task-id>
+<tool-use-id>toolu_0124bXWaNb4Mfg57dQsqTQb1</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-neelanpather-dev-cybernaut-mini/fdd975f5-5d02-4421-8a7b-edac4d87ce80/tasks/bjid8di4i.output</output-file>
+<status>completed</status>
+<summary>Background command "Smoke-test cross-encoder judge and LLM generator on MPS with real models" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+/oh-my-claudecode:autopilot finish as close to nossible build. also consult the other blogs in docs
