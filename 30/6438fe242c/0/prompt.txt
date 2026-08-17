@@ -1,0 +1,71 @@
+scripts/with-accel.sh uv run kedro run --env prod --pipeline corpus_ingest --from-nodes=snapshot_raw_miracl ran now what should i run
+
+---
+
+kdDatasetError: documents: /Users/neelanpather/dev/cybernaut_mini/data/03_primary/ccnews_miracl_corpus.jsonl does not exist.
+  If it is a pipeline output, produce it first: `kedro run --pipeline corpus_ingest` (see conf/base/catalog.yml).
+  If you meant an existing corpus, point at it: `--params input_path=data/01_raw/fixtures/documents.jsonl` (CLI: `--input data/01_raw/fixtures/documents.jsonl`).
+
+---
+
+so "scripts/with-accel.sh uv run kedro run --env prod --pipeline judgment_ingest --from-nodes=validate_judgments --pipeline index_build" ??
+
+---
+
+same issue # 2. Then validate the judgments against the now-existing documents
+scripts/with-accel.sh uv run kedro run --env prod --pipeline judgment_ingest --from-nodes=validate_judgments
+
+---
+
+<task-notification>
+<task-id>bnlijk0hs</task-id>
+<tool-use-id>toolu_01Nns1MxEvUVVyArc1D6A74o</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-neelanpather-dev-cybernaut-mini/5a411f0c-75d3-4d64-a222-50fae8eb0063/tasks/bnlijk0hs.output</output-file>
+<status>completed</status>
+<summary>Background command "Run prod MIRACL branch of corpus_ingest" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bwf8brpps</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-neelanpather-dev-cybernaut-mini/5a411f0c-75d3-4d64-a222-50fae8eb0063/tasks/bwf8brpps.output</output-file>
+<status>failed</status>
+<summary>Background command "Run prod MIRACL branch with docid filter" failed with exit code 1</summary>
+</task-notification>
+
+---
+
+DatasetError: raw_miracl_source: HfFileDataset('miracl/miracl-corpus'): error reading 
+'docs-19.jsonl.gz' (attempt 2/4): [Errno 8] nodename nor servname provided, or not known
+
+---
+
+<task-notification>
+<task-id>bt8te9tn7</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-neelanpather-dev-cybernaut-mini/5a411f0c-75d3-4d64-a222-50fae8eb0063/tasks/bt8te9tn7.output</output-file>
+<status>failed</status>
+<summary>Background command "Re-run prod MIRACL branch with DNS retry fix" failed with exit code 1</summary>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bg25gda0d</task-id>
+<tool-use-id>toolu_01BTLLQ2FggR3YHK6iAS6sA6</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-neelanpather-dev-cybernaut-mini/5a411f0c-75d3-4d64-a222-50fae8eb0063/tasks/bg25gda0d.output</output-file>
+<status>failed</status>
+<summary>Background command "Re-run prod MIRACL branch with OSError retry fix" failed with exit code 1</summary>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bgm77c2xf</task-id>
+<tool-use-id>toolu_01BnagnNAzLgdeNW8eWSXS4Y</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-neelanpather-dev-cybernaut-mini/5a411f0c-75d3-4d64-a222-50fae8eb0063/tasks/bgm77c2xf.output</output-file>
+<status>completed</status>
+<summary>Background command "Re-run prod MIRACL branch with shard cache and hardened retries" completed (exit code 0)</summary>
+</task-notification>

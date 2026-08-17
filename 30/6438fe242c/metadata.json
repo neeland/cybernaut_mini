@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.8.42",
+  "checkpoint_id": "306438fe242c",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 9,
+  "files_touched": [
+    "conf/base/parameters.yml",
+    "conf/prod/catalog.yml",
+    "scripts/dump_miracl_docids.py",
+    "src/cybernaut_mini/datasets.py",
+    "tests/test_datasets.py"
+  ],
+  "sessions": [
+    {
+      "metadata": "/30/6438fe242c/0/metadata.json",
+      "transcript": "/30/6438fe242c/0/full.jsonl",
+      "compact_transcript": "/30/6438fe242c/0/transcript.jsonl",
+      "content_hash": "/30/6438fe242c/0/content_hash.txt",
+      "prompt": "/30/6438fe242c/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 13997,
+    "cache_creation_tokens": 885426,
+    "cache_read_tokens": 6171667,
+    "output_tokens": 61351,
+    "api_call_count": 76
+  }
+}
