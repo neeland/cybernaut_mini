@@ -429,6 +429,14 @@ class HfFileDataset(AbstractDataset[None, list[dict[str, Any]]]):
           set to guarantee the fidelity rule: every qrels-positive doc is in the
           raw snapshot, so recall is never artificially capped. When both are
           ``None`` the whole dataset streams through; ``max_rows`` caps it.
+        - ``filter_values_file`` supplies the same values from a newline-delimited
+          file (one value per line), read at load time. Use it when the value set
+          is generated (e.g. dumped from the qrels source) rather than hand-written
+          in the catalog. File values union with any inline ``filter_values``.
+        - ``shard_cache_dir`` persists each completed shard's kept rows locally,
+          keyed by revision + filter + cap, so an interrupted multi-shard scan
+          resumes at the failed shard instead of restarting. Delete the directory
+          to force a full re-stream.
         - Row counting across shards follows shard alphabetical order. A partial
           last shard is consumed only to the cap — its remaining bytes are not
           downloaded.
@@ -473,6 +481,8 @@ class HfFileDataset(AbstractDataset[None, list[dict[str, Any]]]):
         max_rows: int | None = None,
         filter_column: str | None = None,
         filter_values: list[str] | None = None,
+        filter_values_file: str | None = None,
+        shard_cache_dir: str | None = None,
         token_env: str = "HF_TOKEN",
     ) -> None:
         normalized_ref = (revision or "").strip().lower()
@@ -499,30 +509,104 @@ class HfFileDataset(AbstractDataset[None, list[dict[str, Any]]]):
         self._filter_values: frozenset[str] | None = (
             frozenset(filter_values) if filter_values is not None else None
         )
+        self._filter_values_file = filter_values_file
+        self._shard_cache_dir = shard_cache_dir
         self._token_env = token_env
+
+    def _shard_cache_root(self, filter_vals: frozenset[str] | None) -> Path | None:
+        """Cache directory for this exact (revision, filter, cap) combination.
+
+        The key hashes everything that changes a shard's kept rows, so a stale
+        cache can never be silently reused after the docid set or the cap moves.
+        A None ``shard_cache_dir`` disables caching entirely.
+        """
+        import hashlib
+        import json
+
+        if self._shard_cache_dir is None:
+            return None
+        key_src = json.dumps(
+            {
+                "filter_column": self._filter_column,
+                "filter_values": sorted(filter_vals) if filter_vals is not None else None,
+                "max_rows": self._max_rows,
+            },
+            sort_keys=True,
+        )
+        key = hashlib.blake2b(key_src.encode("utf-8"), digest_size=8).hexdigest()
+        return Path(self._shard_cache_dir) / f"{self._revision[:12]}-{key}"
+
+    def _resolve_filter_values(self) -> frozenset[str] | None:
+        """Union of inline ``filter_values`` and the lines of ``filter_values_file``.
+
+        The file is read at load time, not construction time, so the catalog can be
+        instantiated (``kedro catalog list``, ``kedro viz``) before the file exists.
+        A configured-but-missing or empty file raises: silently streaming the whole
+        corpus is exactly the failure this parameter exists to prevent.
+        """
+        if self._filter_values_file is None:
+            return self._filter_values
+        path = Path(self._filter_values_file)
+        if not path.exists():
+            msg = (
+                f"HfFileDataset({self._repo_id!r}): filter_values_file "
+                f"{self._filter_values_file!r} does not exist. Generate it before "
+                f"loading, or remove the parameter to stream the full corpus."
+            )
+            raise DatasetError(msg)
+        file_values = frozenset(
+            stripped
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if (stripped := line.strip())
+        )
+        if not file_values:
+            msg = (
+                f"HfFileDataset({self._repo_id!r}): filter_values_file "
+                f"{self._filter_values_file!r} is empty; refusing to filter on an "
+                f"empty value set."
+            )
+            raise DatasetError(msg)
+        return file_values | (self._filter_values or frozenset())
 
     #: Emit a within-shard heartbeat every this many scanned lines, so a single
     #: multi-GB shard still shows liveness between the per-shard log lines.
     _LOG_EVERY_LINES = 100_000
 
-    #: Sleep durations (seconds) before shard-read attempt 2, 3, 4.
-    #: Three entries → up to four attempts per shard (initial + three retries).
-    _RETRY_DELAYS: tuple[float, ...] = (2.0, 8.0, 30.0)
+    #: Sleep durations (seconds) before shard-read attempts 2..N.
+    #: Five entries → up to six attempts per shard (initial + five retries).
+    #: The long tail (2m, 5m) rides out multi-minute DNS outages observed in
+    #: production (2026-08-16: [Errno 8] windows exceeding the old 30s maximum).
+    _RETRY_DELAYS: tuple[float, ...] = (2.0, 8.0, 30.0, 120.0, 300.0)
 
     @staticmethod
     def _is_retryable(exc: BaseException) -> bool:
         """Return True for transient network errors that warrant a shard retry.
 
         The closed-client ``RuntimeError`` is the error observed in production
-        (MIRACL, shard 55/66). ``ConnectionError`` and ``TimeoutError`` cover
-        TCP-level drops. ``HfHubHTTPError`` covers Hub 5xx responses.
+        (MIRACL, shard 55/66). ``OSError`` covers the whole family of I/O-level
+        faults this loop can hit — TCP drops (``ConnectionError``), timeouts
+        (``TimeoutError``), and transient DNS failures (``[Errno 8] nodename nor
+        servname provided``, observed in production at MIRACL shards 20/66 and
+        5/66, surfaced both as ``socket.gaierror`` and as wrapper OSErrors from
+        the HTTP stack). Everything in the read path is network I/O, so a broad
+        OSError match cannot misfire on local-disk faults. ``HfHubHTTPError``
+        covers Hub 5xx responses.
         """
-        if isinstance(exc, (ConnectionError, TimeoutError)):
+        if isinstance(exc, (OSError, TimeoutError)):
             return True
         if isinstance(exc, RuntimeError) and "client has been closed" in str(exc).lower():
             return True
         try:
-            from huggingface_hub.utils import HfHubHTTPError  # type: ignore[import-not-found]
+            import httpx
+
+            # huggingface_hub's HTTP stack surfaces DNS/connect/read faults as
+            # httpx transport errors, which do NOT subclass OSError.
+            if isinstance(exc, httpx.TransportError):
+                return True
+        except ImportError:
+            pass
+        try:
+            from huggingface_hub.utils import HfHubHTTPError  # type: ignore[attr-defined]
 
             if isinstance(exc, HfHubHTTPError):
                 return True
@@ -585,8 +669,12 @@ class HfFileDataset(AbstractDataset[None, list[dict[str, Any]]]):
         rows: list[dict[str, Any]] = []
         scanned = 0
         filter_col = self._filter_column
-        filter_vals = self._filter_values  # frozenset or None
+        filter_vals = self._resolve_filter_values()  # frozenset or None
         max_attempts = len(self._RETRY_DELAYS) + 1
+
+        cache_root = self._shard_cache_root(filter_vals)
+        if cache_root is not None:
+            cache_root.mkdir(parents=True, exist_ok=True)
 
         for shard_index, shard_path in enumerate(shard_paths, start=1):
             if self._max_rows is not None and len(rows) >= self._max_rows:
@@ -598,6 +686,31 @@ class HfFileDataset(AbstractDataset[None, list[dict[str, Any]]]):
                 break
 
             shard_name = shard_path.rsplit("/", 1)[-1]
+
+            # ── Shard cache ───────────────────────────────────────────────────
+            # A completed shard's kept rows are replayed from disk, so a run
+            # interrupted at shard 34/66 resumes there instead of re-streaming
+            # everything. The cache key (revision + filter + cap) guarantees a
+            # cached file is only ever reused for an identical load.
+            cache_file = (
+                cache_root / f"{shard_name}.cache.jsonl" if cache_root is not None else None
+            )
+            if cache_file is not None and cache_file.exists():
+                cached = [
+                    json.loads(line)
+                    for line in cache_file.read_text(encoding="utf-8").splitlines()
+                    if line
+                ]
+                rows.extend(cached)
+                logger.info(
+                    "%s: shard %d/%d %s — %s row(s) from cache",
+                    self._repo_id,
+                    shard_index,
+                    len(shard_paths),
+                    shard_name,
+                    f"{len(cached):,}",
+                )
+                continue
 
             # ── Per-shard retry loop ──────────────────────────────────────────
             # On a transient network error (closed client, connection drop, 5xx)
@@ -682,6 +795,14 @@ class HfFileDataset(AbstractDataset[None, list[dict[str, Any]]]):
                         max_attempts,
                     )
 
+            if cache_file is not None:
+                tmp_file = cache_file.with_suffix(".tmp")
+                tmp_file.write_text(
+                    "".join(json.dumps(row) + "\n" for row in shard_rows),
+                    encoding="utf-8",
+                )
+                tmp_file.replace(cache_file)  # atomic: no partial cache on a crash
+
             rows.extend(shard_rows)
             scanned += shard_scanned
             logger.info(
@@ -724,6 +845,8 @@ class HfFileDataset(AbstractDataset[None, list[dict[str, Any]]]):
             "filter_values_count": (
                 len(self._filter_values) if self._filter_values is not None else None
             ),
+            "filter_values_file": self._filter_values_file,
+            "shard_cache_dir": self._shard_cache_dir,
         }
 
 

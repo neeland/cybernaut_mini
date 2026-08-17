@@ -696,6 +696,76 @@ def test_hf_file_dataset_loads_all_shards(monkeypatch: pytest.MonkeyPatch) -> No
     assert result[0]["docid"] == "0#0"  # first row of first shard
 
 
+def test_hf_file_dataset_filter_values_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Only rows whose filter_column value appears in the file are kept."""
+    shards = _make_shards(3, rows_each=2)  # docids 0#0 .. 5#0
+    _install_fake_hf_file_fs(monkeypatch, shards)
+    monkeypatch.setattr(_time_module, "sleep", lambda _: None)
+
+    docid_file = tmp_path / "docids.txt"
+    docid_file.write_text("0#0\n3#0\n\n", encoding="utf-8")  # blank line ignored
+
+    ds = HfFileDataset(
+        repo_id=_REPO_ID,
+        revision=_CORPUS_SHA,
+        path_pattern=_PATH_PAT,
+        filter_column="docid",
+        filter_values_file=str(docid_file),
+    )
+    result = ds.load()
+    assert [row["docid"] for row in result] == ["0#0", "3#0"]
+
+
+def test_hf_file_dataset_filter_values_file_unions_with_inline_values(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    shards = _make_shards(3, rows_each=2)
+    _install_fake_hf_file_fs(monkeypatch, shards)
+    monkeypatch.setattr(_time_module, "sleep", lambda _: None)
+
+    docid_file = tmp_path / "docids.txt"
+    docid_file.write_text("0#0\n", encoding="utf-8")
+
+    ds = HfFileDataset(
+        repo_id=_REPO_ID,
+        revision=_CORPUS_SHA,
+        path_pattern=_PATH_PAT,
+        filter_column="docid",
+        filter_values=["5#0"],
+        filter_values_file=str(docid_file),
+    )
+    result = ds.load()
+    assert [row["docid"] for row in result] == ["0#0", "5#0"]
+
+
+def test_hf_file_dataset_missing_filter_values_file_raises(tmp_path: Path) -> None:
+    ds = HfFileDataset(
+        repo_id=_REPO_ID,
+        revision=_CORPUS_SHA,
+        path_pattern=_PATH_PAT,
+        filter_column="docid",
+        filter_values_file=str(tmp_path / "absent.txt"),
+    )
+    with pytest.raises(DatasetError, match="does not exist"):
+        ds._resolve_filter_values()
+
+
+def test_hf_file_dataset_empty_filter_values_file_raises(tmp_path: Path) -> None:
+    docid_file = tmp_path / "docids.txt"
+    docid_file.write_text("\n\n", encoding="utf-8")
+    ds = HfFileDataset(
+        repo_id=_REPO_ID,
+        revision=_CORPUS_SHA,
+        path_pattern=_PATH_PAT,
+        filter_column="docid",
+        filter_values_file=str(docid_file),
+    )
+    with pytest.raises(DatasetError, match="empty"):
+        ds._resolve_filter_values()
+
+
 def test_hf_file_dataset_max_rows_cap(monkeypatch: pytest.MonkeyPatch) -> None:
     shards = _make_shards(4, rows_each=3)
     _install_fake_hf_file_fs(monkeypatch, shards)
@@ -708,7 +778,119 @@ def test_hf_file_dataset_max_rows_cap(monkeypatch: pytest.MonkeyPatch) -> None:
     assert len(result) == 5
 
 
+# ── Shard cache tests ─────────────────────────────────────────────────────────
+
+
+def _install_no_network_fs(
+    monkeypatch: pytest.MonkeyPatch, shard_paths: list[str]
+) -> None:
+    """Fake HfFileSystem that lists shards but fails hard on any open()."""
+
+    class _NoNetworkFs:
+        def __init__(self, token: object = None, skip_instance_cache: bool = False) -> None:
+            pass
+
+        def glob(self, pattern: str) -> list[str]:
+            return sorted(shard_paths)
+
+        def open(self, path: str, mode: str = "rb") -> _GzFile:
+            raise AssertionError(f"network read attempted for {path!r}")
+
+    fake_hf = types.ModuleType("huggingface_hub")
+    fake_hf.HfFileSystem = _NoNetworkFs  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "huggingface_hub", fake_hf)
+
+
+def test_hf_file_dataset_shard_cache_replays_without_network(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Second load with a populated cache never touches the network."""
+    shards = _make_shards(3, rows_each=2)
+    _install_fake_hf_file_fs(monkeypatch, shards)
+    monkeypatch.setattr(_time_module, "sleep", lambda _: None)
+
+    ds = HfFileDataset(
+        repo_id=_REPO_ID,
+        revision=_CORPUS_SHA,
+        path_pattern=_PATH_PAT,
+        shard_cache_dir=str(tmp_path / "cache"),
+    )
+    first = ds.load()
+    assert len(first) == 6
+
+    _install_no_network_fs(monkeypatch, sorted(shards))
+    second = ds.load()
+    assert second == first
+
+
+def test_hf_file_dataset_shard_cache_resumes_after_mid_scan_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A failure at shard 2 keeps shard 1's cache; the re-run resumes from it."""
+    shards = _make_shards(3, rows_each=2)
+    shard2_name = sorted(shards)[1].rsplit("/", 1)[-1]
+
+    _install_fake_hf_file_fs(
+        monkeypatch,
+        shards,
+        fail_shard=shard2_name,
+        fail_error=ValueError("permanent"),  # non-retryable → fails fast
+        fail_on_attempts=999,
+    )
+    monkeypatch.setattr(_time_module, "sleep", lambda _: None)
+
+    cache_dir = tmp_path / "cache"
+    ds = HfFileDataset(
+        repo_id=_REPO_ID,
+        revision=_CORPUS_SHA,
+        path_pattern=_PATH_PAT,
+        shard_cache_dir=str(cache_dir),
+    )
+    with pytest.raises(DatasetError):
+        ds.load()
+
+    cached_files = list(cache_dir.rglob("*.cache.jsonl"))
+    assert len(cached_files) == 1, "shard 1 should be cached before the failure"
+
+    _install_fake_hf_file_fs(monkeypatch, shards)  # healthy network
+    result = ds.load()
+    assert len(result) == 6
+    assert [row["docid"] for row in result] == [f"{i}#0" for i in range(6)]
+
+
+def test_hf_file_dataset_shard_cache_keyed_by_filter(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Different filter sets must not share cache entries."""
+    shards = _make_shards(2, rows_each=2)
+    monkeypatch.setattr(_time_module, "sleep", lambda _: None)
+    cache_dir = tmp_path / "cache"
+
+    results = []
+    for values in (["0#0"], ["1#0"]):
+        _install_fake_hf_file_fs(monkeypatch, shards)
+        ds = HfFileDataset(
+            repo_id=_REPO_ID,
+            revision=_CORPUS_SHA,
+            path_pattern=_PATH_PAT,
+            filter_column="docid",
+            filter_values=values,
+            shard_cache_dir=str(cache_dir),
+        )
+        results.append(ds.load())
+
+    assert [row["docid"] for row in results[0]] == ["0#0"]
+    assert [row["docid"] for row in results[1]] == ["1#0"]
+    assert len(list(cache_dir.iterdir())) == 2, "each filter set gets its own subdir"
+
+
 # ── Retry tests ───────────────────────────────────────────────────────────────
+
+
+def test_hf_file_dataset_httpx_transport_error_is_retryable() -> None:
+    httpx = pytest.importorskip("httpx")
+    assert HfFileDataset._is_retryable(httpx.ConnectError("[Errno 8] nodename nor servname"))
+    assert not HfFileDataset._is_retryable(ValueError("bad json"))
 
 
 def test_hf_file_dataset_retries_transient_error_and_returns_full_result(
@@ -747,6 +929,33 @@ def test_hf_file_dataset_retries_transient_error_and_returns_full_result(
     assert any(c["skip_instance_cache"] for c in created_fs), (
         "expected HfFileSystem(skip_instance_cache=True) on retry"
     )
+
+
+def test_hf_file_dataset_retries_dns_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Shard 2 raises a DNS gaierror once; retry succeeds → full result.
+
+    This is the production failure mode: MIRACL shard 20/66,
+    ``socket.gaierror: [Errno 8] nodename nor servname provided, or not known``.
+    """
+    import socket
+
+    shards = _make_shards(3, rows_each=2)
+    shard2_name = sorted(shards)[1].rsplit("/", 1)[-1]  # docs-01.jsonl.gz
+
+    _install_fake_hf_file_fs(
+        monkeypatch,
+        shards,
+        fail_shard=shard2_name,
+        fail_error=socket.gaierror(8, "nodename nor servname provided, or not known"),
+        fail_on_attempts=1,
+    )
+    monkeypatch.setattr(_time_module, "sleep", lambda _: None)
+
+    ds = HfFileDataset(repo_id=_REPO_ID, revision=_CORPUS_SHA, path_pattern=_PATH_PAT)
+    result = ds.load()
+    assert len(result) == 6
 
 
 def test_hf_file_dataset_permanent_failure_raises_dataset_error_naming_shard(

@@ -42,12 +42,22 @@ raw_miracl_source:
   #   uv run python -c "from huggingface_hub import HfApi; \
   #     print(HfApi().dataset_info('miracl/miracl-corpus').sha)"
   revision: d921ec7e349ce0d28daf30b2da9da5ee698bef0d
-  # English passages only. Docid-set filtering (to the 7,921 qrel-referenced
-  # passages) is applied inside the corpus_ingest node using the loaded qrels,
-  # not here — the node receives both sources and can pass filter_values at
-  # runtime. The raw snapshot holds only the filtered passages (01_raw principle:
-  # never re-download, nodes.py:38).
+  # English passages only, filtered at stream time to the qrel-referenced docids.
+  # Without the filter the full en corpus (32.9M passages, ~25 GB) streams into
+  # memory and the snapshot save dies — observed 2026-08-16. The docid file is
+  # generated from the pinned miracl/miracl qrels (same revision family as
+  # miracl_en_dev_source below):
+  #   uv run python scripts/dump_miracl_docids.py
+  # Filtering here does NOT violate the "snapshot stays complete" principle in
+  # corpus_ingest/nodes.py: the qrel docid set is fixed by the pinned MIRACL
+  # revision, not by build parameters, so the filtered snapshot never needs
+  # re-fetching when the build is re-tuned.
   path_pattern: "miracl-corpus-v1.0-en/*.jsonl.gz"
+  filter_column: docid
+  filter_values_file: data/01_raw/miracl_en_dev_docids.txt
+  # Completed shards replay from here on re-run, so a network fault at shard
+  # 34/66 resumes at 34 instead of re-streaming ~20 minutes of prior shards.
+  shard_cache_dir: data/01_raw/.miracl_shard_cache
 
 raw_miracl:
   type: cybernaut_mini.datasets.JsonlDataset

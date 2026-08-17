@@ -103,7 +103,10 @@ corpus_miracl:
   metadata_fields: [docid]
   id_prefix: mir
   default_language: en
-  min_text_chars: 32
+  # 1, not 32: this branch exists for qrels fidelity, and MIRACL en-dev references
+  # six sub-32-char table-fragment passages (e.g. "Hosts", "Group C" on page
+  # 48576696). Dropping any qrels docid fails validate_judgments.
+  min_text_chars: 1
 
 # Narrowing applied between the intermediate and primary layers.
 corpus_selection:
