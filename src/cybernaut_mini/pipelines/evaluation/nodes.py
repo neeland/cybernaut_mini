@@ -10,6 +10,49 @@ Node sequence
 validate_judgments -> judgments_list (list of Judgment dicts)
 evaluate_node      -> metrics_list (list of ModeMetrics dicts)
 report_node        -> eval_report (structured summary, persisted by the catalog)
+
+Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — the eight-stage
+    pipeline's own quality is measured against human judgments. The post mentions
+    per-shard "Evals"; the build guide's step 10 reads that as whole-corpus
+    nDCG/recall@k against gold judgments [inferred]. Local copy:
+    ``data/00_reference/the-road-to-cybernaut-1.md``. The real-data rule that
+    makes these numbers meaningful is in ``data/README.md``.
+
+Assumptions:
+    - Judgments are real MIRACL qrels, never synthetic. ``validate_judgments``
+      rejects an empty file and names the offending record on a schema failure,
+      because a truncated or fabricated qrels file would otherwise produce a
+      plausible-looking metric instead of an error.
+    - Nodes are pure and open no paths: the index arrives already loaded from
+      ``ShardIndexDataset`` and the judgments from a ``JsonlDataset``.
+      ``TextProcessor`` and the embedding provider are constructed *inside*
+      ``evaluate_node`` rather than passed as datasets — they are cheap to rebuild
+      and Kedro's in-memory layer deepcopies whatever it is handed.
+    - The provider is built with ``provider_from_meta(index.meta, ...)`` so the
+      evaluation embedder is the one the index was built with. A config mismatch
+      would otherwise surface as a mysterious dense-mode collapse.
+    - ``shard_recall_at_n`` means different things per mode and is never averaged
+      across them: for lexical/dense/hybrid it measures router quality from one
+      ``route()`` call shared by all three, while agent mode measures the shards
+      the search actually explored. ``report_node`` keeps them in a per-mode map
+      for exactly that reason.
+    - ``modes`` defaults to all four (lexical, dense, hybrid, agent). The node
+      signature exposes the subset knob so a direct caller or a test can narrow
+      it, but the pipeline does not pass it.
+
+Alternatives considered:
+    - Folding evaluation into ``index_build``: fewer pipelines, but a build is
+      reproducible from a corpus and a seed while an evaluation is reproducible
+      only against a pinned qrels file. A shared DAG would make it impossible to
+      re-evaluate an existing index without rebuilding it.
+    - Passing the ``LoadedIndex`` between nodes as a dataset: works, but Kedro's
+      ``MemoryDataset`` deepcopy was measured at 21.6M calls and ~32s on a
+      16k-document build. Loading once inside ``evaluate_node`` is cheaper and
+      keeps exactly one node responsible for the index.
+    - Computing the metrics inside ``report_node``: would remove a dataset from
+      the catalog, but the metrics list is the artifact worth persisting. The
+      report is a view of it, so it can be regenerated without re-running
+      retrieval.
 """
 
 from __future__ import annotations

@@ -7,6 +7,37 @@ messages without catching generic exceptions.
 Parsing and validation are separate so both entry points share one rule set: the
 Kedro catalog hands nodes already-parsed records, while :func:`load_documents`
 still reads a JSONL file directly for the CLI and for tests.
+
+Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — ingestion is upstream of
+    stage 1: the post's pipeline starts from already-parsed documents, so this module
+    is the strict door between raw corpus rows and the ``Document`` objects every
+    later stage assumes. Local copy:
+    ``data/00_reference/the-road-to-cybernaut-1.md``.
+
+Assumptions:
+    - Validation is fail-fast and whole-file: one bad row, one duplicate id, or one
+      missing required field raises ``IngestError`` and no partial document list is
+      returned. Silent skipping is the failure mode the real-data rule forbids.
+    - Parsing and validation are separate functions so both callers share one rule
+      set: ``load_documents`` reads JSONL for the CLI and tests, while the Kedro
+      catalog hands already-parsed dicts to ``validate_records``.
+    - Blank lines are skipped silently; every other line is expected to be a JSON
+      object.
+    - Error messages carry the position and, when it can be read, the record ``id``,
+      so a 460-document fixture failure points at a locatable row.
+    - Duplicate detection is on the exact ``Document.id`` string, not a normalised
+      form, and happens after field validation.
+
+Alternatives considered:
+    - ``pandas.read_json`` or ``datasets.load_dataset``: rejected because neither
+      reports the offending line number, which is the only thing that makes a broken
+      corpus fixable.
+    - Letting pydantic's ``ValidationError`` escape: rejected in favour of
+      ``IngestError`` with the line and id attached; callers catch one domain error
+      instead of ``Exception``.
+    - Lazy streaming ingestion that yields documents one at a time: rejected for now
+      because every consumer embeds the full corpus anyway and the duplicate check
+      needs the whole id set.
 """
 
 from __future__ import annotations

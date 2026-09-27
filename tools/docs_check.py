@@ -109,6 +109,11 @@ SECRET_PATTERNS = (
 #: this file necessarily contains the patterns themselves.
 SECRET_SCAN_EXEMPT = ("tools/docs_check.py",)
 
+#: Paths exempt from the blog-reference scan. This file's own docstrings use
+#: example paths to explain what the check catches, and would otherwise be
+#: reported as citing a file that does not exist.
+BLOG_REF_EXEMPT = ("tools/docs_check.py",)
+
 TEXT_SUFFIXES = {
     ".py", ".md", ".yaml", ".yml", ".json", ".jsonl", ".toml", ".txt",
     ".ipynb", ".sh", ".cfg", ".ini", ".html",
@@ -347,6 +352,8 @@ def check_blog_references(report: Report, files: list[Path]) -> None:
 
     for path in files:
         if path.suffix not in {".py", ".md"}:
+            continue
+        if str(path) in BLOG_REF_EXEMPT:
             continue
         content = read_text(path)
         if content is None:

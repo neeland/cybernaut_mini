@@ -7,7 +7,7 @@ Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — stage 8, step 5:
     idiom rather than a new mechanism. Local copy:
     ``docs/blog-archive/the-road-to-cybernaut-1.md``.
 
-Assumptions — the reading of step 5 [inferred]:
+Assumptions: the reading of step 5 [inferred].
     An intent match RERANKS. It is not a filter and it is not an unbounded score
     bonus. Three properties of the post force that reading:
 

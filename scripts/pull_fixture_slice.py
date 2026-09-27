@@ -155,18 +155,20 @@ def _fetch_miracl_corpus_passages(
             break
         found_in_shard = 0
         try:
-            with fs.open(shard_path, "rb") as raw_fh:  # type: ignore[union-attr]
-                with gzip.open(raw_fh, "rt", encoding="utf-8") as gz:
-                    for line in gz:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        row: dict[str, object] = json.loads(line)
-                        docid = str(row.get("docid", ""))
-                        if docid in remaining:
-                            rows.append(row)
-                            remaining.discard(docid)
-                            found_in_shard += 1
+            with (
+                fs.open(shard_path, "rb") as raw_fh,  # type: ignore[union-attr]
+                gzip.open(raw_fh, "rt", encoding="utf-8") as gz,
+            ):
+                for line in gz:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    row: dict[str, object] = json.loads(line)
+                    docid = str(row.get("docid", ""))
+                    if docid in remaining:
+                        rows.append(row)
+                        remaining.discard(docid)
+                        found_in_shard += 1
         except Exception as exc:
             print(f"  Shard {i:02d}: SKIPPED after repeated network error ({exc!r})")
             continue

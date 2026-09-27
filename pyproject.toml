@@ -40,7 +40,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-st = ["sentence-transformers>=3.0"]
+# Also unlocks the model-backed agent providers (agent.judge: cross_encoder,
+# agent.query_generator: llm): the judge comes from sentence-transformers'
+# CrossEncoder and the generator from transformers, pinned explicitly because
+# query_generator.py imports it directly (>=4.56 for the `dtype` kwarg that
+# replaced `torch_dtype`, removed in transformers 5.x).
+st = ["sentence-transformers>=3.0", "transformers>=4.56"]
 # Apple silicon: the macOS arm64 torch wheel carries the MPS backend, so the
 # 'sentence_transformers' provider runs on the GPU with embedding.device=auto.
 # Pulled in as its own extra rather than added to `st` because the wheel is large
@@ -61,6 +66,27 @@ hf = ["datasets>=3.0", "huggingface-hub>=0.25"]
 cjk = []
 # Anthropic-native client, for users who prefer it over the OpenAI-compatible path.
 anthropic = ["anthropic>=0.34"]
+# --- WORLD pillar: event store, anchor-sentence signals, indices, backtests ---
+# yfinance is opt-in market data for the risk-on/risk-off overlay; pycountry
+# backs country tagging for the GPR reproduction; matplotlib renders the
+# validation charts the posts lead with.
+world = [
+    "pandas>=2.2",
+    "pyarrow>=17",
+    "yfinance>=0.2.40",
+    "pycountry>=24.6",
+    "matplotlib>=3.9",
+]
+# --- Sentiment lab: labeler pool, ensemble-and-distil, fine-tune recipes ---
+# flair is deliberately excluded (heavy); its labeler column degrades gracefully.
+sentiment = [
+    "textblob>=0.18",
+    "vadersentiment>=3.3",
+    "polars>=1.5",
+    "peft>=0.13",
+]
+# --- Self-organizing entities: GLiNER discovery tagger (AC tagger is core) ---
+entities = ["gliner>=0.2.13"]
 
 [project.scripts]
 cybernaut-mini = "cybernaut_mini.cli:app"
@@ -68,7 +94,11 @@ cybernaut-mini = "cybernaut_mini.cli:app"
 [dependency-groups]
 dev = [
     "pytest>=8.0",
-    "ruff>=0.6",
+    # Pinned, not floating. Ruff's default rule set and its notebook coverage change
+    # between minor releases, and an unbounded specifier silently turned this repo's
+    # lint gate red on files nobody had touched (long lines in notebook cells). The
+    # one deliberate exception is the per-file-ignores entry below.
+    "ruff>=0.15,<0.16",
     "mypy>=1.10",
     "types-PyYAML",
     # Notebook execution. The notebooks are executed by the test suite against the
@@ -99,6 +129,12 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# Notebook cells quote long passages verbatim, so E501 is noise in a teaching
+# artifact. Every other rule still applies: a genuine defect in a cell (undefined
+# name, unused import) still fails the gate.
+"*.ipynb" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"

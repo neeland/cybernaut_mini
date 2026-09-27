@@ -1,0 +1,50 @@
+name: CI
+
+# The same gates `make check` runs locally, so "green locally" and "green in CI"
+# mean the same thing.
+#
+# `ruff format --check` is deliberately NOT here yet: this repository has
+# pre-existing formatter drift across ~90 files from an older ruff, and gating on
+# it would fail unrelated pull requests. Run it incrementally via
+# `make format-check` when touching a file. See AGENTS.md.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # --frozen: fail rather than silently re-resolve. A lockfile that has
+      # drifted from pyproject.toml is a reproducibility bug, not a warning.
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Type check
+        run: uv run mypy src
+
+      # Stdlib-only, so it does not need the virtualenv — the same invocation the
+      # pre-commit hook uses.
+      - name: Documentation contract
+        run: python3 tools/docs_check.py
+
+      # Executes every notebook in a fresh kernel, end to end
+      # (tests/test_notebooks.py). A notebook that no longer runs fails the build.
+      - name: Test
+        run: uv run pytest

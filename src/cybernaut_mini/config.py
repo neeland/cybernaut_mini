@@ -3,6 +3,39 @@
 Precedence (highest wins): CLI overrides > environment variables > YAML file > defaults.
 Environment variables use the prefix ``CYBERNAUT_MINI__`` with ``__`` as the section
 separator, e.g. ``CYBERNAUT_MINI__EMBEDDING__PROVIDER=hash``.
+
+Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — ``embedding.provider``
+    selects how blog stage 4 ("Instruction Tuning and Embedding") is realised, from
+    the offline hash vectors to real e5-small weights, and ``rrf`` carries the stage
+    5/6 fusion constants. Local copy:
+    ``data/00_reference/the-road-to-cybernaut-1.md``.
+
+Assumptions:
+    - Precedence is CLI overrides > environment > YAML file > model defaults, and it
+      is total: ``_deep_merge`` recurses into nested sections, so setting one field in
+      a profile does not drop that section's other defaults.
+    - ``extra="forbid"`` on every model. A misspelled key in a profile is an error,
+      not a silently ignored line, because a typo'd ``n_shards`` that quietly keeps 12
+      is exactly the kind of failure this repo cannot afford.
+    - ``--offline`` is enforced structurally: any embedding provider other than
+      ``hash`` is rejected, because "may need a download" is treated as "does", since
+      a warm cache is not something the config can verify.
+    - The agent defaults stay ``heuristic`` so a bare install downloads nothing and
+      the test suite stays offline-deterministic; ``configs/neural.yaml`` is the
+      opt-in.
+    - ``embedding.model`` and ``agent.judge_model`` stay empty-able and resolve
+      through ``PROVIDER_DEFAULT_MODEL`` / ``AGENT_DEFAULT_MODEL``, so setting only
+      ``provider`` never inherits another provider's model name.
+
+Alternatives considered:
+    - ``pydantic-settings`` or ``dynaconf``: fewer lines to write, but each brings a
+      dependency and hides the precedence order inside the library. ``_deep_merge``
+      and ``_env_overrides`` are ~30 explicit lines a reader can check.
+    - A single flat config model: rejected because ``extra="forbid"`` is only useful
+      when the nesting matches the YAML a reader actually edits.
+    - Making ``model2vec`` the offline default instead of ``hash``: rejected because
+      the first quick-start command would then need a ~100 MB download; ``hash`` is
+      the reproducibility anchor and the only provider ``--offline`` accepts.
 """
 
 from __future__ import annotations

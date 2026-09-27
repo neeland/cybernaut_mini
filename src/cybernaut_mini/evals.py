@@ -18,7 +18,9 @@ Retrieval call accounting
 --------------------------
 * Baseline modes (lexical/dense/hybrid): 1 call per query (one ``retrieve`` call).
 * Agent mode: ``result.trace.retrieval_calls`` (up to 18 per query).
-* LLM calls: 0 for all modes (heuristic judge + generator, no LLM).
+* LLM calls: 0 on the default heuristic path; when the agent is configured with
+  the model-backed judge/generator, ``result.trace.llm_calls`` counts their
+  invocations and is averaged per query like retrieval calls.
 
 Wall-clock time is measured with ``time.perf_counter`` and labelled informational
 in the output — it captures real elapsed time but is not reproducible.
@@ -30,10 +32,43 @@ Shard-recall accounting
 * Agent mode: the shards the agent actually searched (``AgentResult.shard_ids``),
   which differs from the static router call — it measures *exploration coverage*,
   not *router quality*. Do not average or compare the two directly.
+
+Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — the metrics measure the
+    failures the post names: stage 5 exists because "if we route the question to the
+    wrong shards, we won't return the best document", and stage 8 is the retrieval
+    map-reduce this scores. Local copy:
+    ``data/00_reference/the-road-to-cybernaut-1.md``.
+
+Assumptions:
+    - Relevance is graded, not binary: qrels are read as an int grade per doc_id, and
+      ``ndcg_at_k`` uses the sorted true grades as the ideal DCG.
+    - Baseline modes cost exactly 1 retrieval call per query (one ``retrieve``), and
+      agent mode costs ``trace.retrieval_calls``. The two are reported side by side
+      but never summed.
+    - ``shard_recall_at_n`` means router quality for lexical/dense/hybrid and
+      exploration coverage for agent mode. They are computed identically and measure
+      different things, so the runner explicitly forbids comparing them.
+    - ``wall_clock_seconds`` is labelled informational: it is real elapsed time and
+      the only field that varies between byte-identical runs.
+    - An empty judgment list yields zeroed ``ModeMetrics`` per mode rather than an
+      exception, so a caller can print a table for a corpus with no qrels.
+    - The committed fixture is 25 MIRACL en-dev queries with grade 0/1, so metric
+      values are meaningful at this size but not extrapolable to larger corpora.
+
+Alternatives considered:
+    - ``pytrec_eval`` / ``ir_measures``: battle-tested and faster on large qrels, but
+      they add a compiled dependency for four metrics that are one arithmetic line
+      each, and the post names no metric library to stay compatible with.
+    - Scoring every mode with the agent's searched shards: rejected because it would
+      conflate router quality with exploration coverage and make static modes look
+      artificially strong.
+    - Binary relevance with plain precision/recall: rejected because the MIRACL qrels
+      carry grades and nDCG is what the committed judgments support.
 """
 
 from __future__ import annotations
 
+import logging
 import math
 import time
 from dataclasses import dataclass
@@ -45,6 +80,11 @@ if TYPE_CHECKING:
     from cybernaut_mini.models import Judgment
     from cybernaut_mini.providers.embeddings import EmbeddingProvider
     from cybernaut_mini.text import TextProcessor
+
+logger = logging.getLogger(__name__)
+
+#: Emit a progress line every this many queries inside a mode's eval loop.
+_LOG_EVERY_QUERIES = 10
 
 
 # ------------------------------------------------------------------ #
@@ -203,7 +243,8 @@ def evaluate(
       - Baseline: 1 per query.
       - Agent: ``result.trace.retrieval_calls``.
 
-    LLM call count: always 0 (heuristic providers only).
+    LLM call count: 0 for heuristic providers; ``result.trace.llm_calls`` when
+    the agent runs the model-backed judge/generator.
 
     Shard-recall computation
     -------------------------
@@ -243,8 +284,10 @@ def evaluate(
     # Pre-route every query once so all three static modes share the result.
     # route() caches its ShardSelector per (index, model), so the HNSW build
     # is paid at most once per evaluate() call regardless of query count.
+    t_route = time.perf_counter()
+    logger.info("routing %d queries (top_n=%d) ...", n, shard_beam_n)
     routed_shard_ids: list[list[int]] = []
-    for judgment in judgments:
+    for route_idx, judgment in enumerate(judgments, start=1):
         ids, _ = route(
             index,
             judgment.question,
@@ -254,6 +297,14 @@ def evaluate(
             top_n=shard_beam_n,
         )
         routed_shard_ids.append(ids)
+        if route_idx % _LOG_EVERY_QUERIES == 0:
+            logger.info(
+                "routing: %d/%d queries, %.0fs elapsed",
+                route_idx,
+                n,
+                time.perf_counter() - t_route,
+            )
+    logger.info("routing done in %.1fs", time.perf_counter() - t_route)
 
     for mode in modes:
         total_r5 = 0.0
@@ -269,7 +320,16 @@ def evaluate(
             results.append(ModeMetrics(mode=mode))
             continue
 
+        logger.info("mode=%s: evaluating %d queries ...", mode, n)
         for idx, judgment in enumerate(judgments):
+            if idx > 0 and idx % _LOG_EVERY_QUERIES == 0:
+                logger.info(
+                    "mode=%s: %d/%d queries, %.0fs elapsed",
+                    mode,
+                    idx,
+                    n,
+                    time.perf_counter() - t_start,
+                )
             question = judgment.question
             relevance = judgment.relevant_document_ids
             relevant_ids = set(relevance.keys())
@@ -312,6 +372,7 @@ def evaluate(
             total_llm_calls += llm_calls
 
         wall = time.perf_counter() - t_start
+        logger.info("mode=%s: done in %.1fs", mode, wall)
         results.append(
             ModeMetrics(
                 mode=mode,

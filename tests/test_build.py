@@ -931,7 +931,9 @@ def test_chunked_embed_matches_unchunked(tmp_path: Path) -> None:
         _embed_with_cache(texts, provider, config, chunk_size=7, cache_dir=cache_dir),
         dtype=np.float32,
     )
-    np.testing.assert_array_equal(full, chunked2, err_msg="chunked != single-shot on cache-hit pass")
+    np.testing.assert_array_equal(
+        full, chunked2, err_msg="chunked != single-shot on cache-hit pass"
+    )
 
     # Manifest records all 4 chunks
     import json

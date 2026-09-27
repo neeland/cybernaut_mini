@@ -1,0 +1,253 @@
+# The learning curriculum behind `cybernaut-mini explain`.
+#
+# One entry per stage of the 8-stage "Hybrid-3" query pipeline described in
+# https://nosible.com/blog/the-road-to-cybernaut-1. Each entry answers the three
+# questions a reader arrives with: what did NOSIBLE disclose, what did this replica
+# have to decide, and what was rejected?
+#
+# `modules` are repository-relative paths. tests/test_curriculum.py asserts every one
+# exists, so this map cannot rot away from the code it describes.
+#
+# Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1
+# Local copy: data/00_reference/the-road-to-cybernaut-1.md
+#
+# Assumptions:
+#   - Section 1 of docs/REVERSE_ENGINEERING_GUIDE.md is the authority for the stage
+#     numbering and for which technology in each stage was disclosed vs inferred.
+#   - Each entry cites the module that IMPLEMENTS the stage, not every module that
+#     participates in it; the full inventory belongs in the package README.
+#
+# Alternatives considered:
+#   - Deriving these entries from module docstrings at runtime: rejected, because the
+#     course content would then depend on docstring formatting. See
+#     src/cybernaut_mini/curriculum.py for the full rationale.
+
+stages:
+  - stage: 1
+    title: Language detection and translation
+    blog_ref: https://nosible.com/blog/the-road-to-cybernaut-1
+    modules:
+      - src/cybernaut_mini/query/s1_language/detect.py
+      - src/cybernaut_mini/query/s1_language/prepare.py
+      - src/cybernaut_mini/query/s1_language/translate.py
+    disclosed: >
+      The question's language is detected with fasttext-langdetect, which covers 170+
+      languages. When results are requested in a different language, the question is
+      translated into it; the post names gemma-3n-e4b-it through OpenRouter, covering
+      140 languages. Its worked example translates a question from English into
+      Japanese.
+    assumptions: >
+      The offline default is a documented identity translator (NullTranslator), because
+      a real translation provider needs a credential and the pipeline must still run end
+      to end without one; the OpenAI-compatible translator is opt-in. Credentials are
+      read from the environment on every call rather than cached at import, so a key
+      added or rotated mid-session takes effect on the next translation. Translation is
+      a single non-streaming completion at temperature 0: as deterministic as a hosted
+      model gets, but still not byte-reproducible, so callers that need stability cache
+      the output rather than trusting the endpoint.
+    alternatives: >
+      ANTHROPIC_API_KEY is deliberately not consulted even when it is set: Anthropic's
+      API is not OpenAI-shaped at this base URL, so accepting it would surface a 401 at
+      the far end instead of the actionable error raised locally. Resolving the
+      credential once at import was also rejected, because it both breaks a credential
+      rotation during a session and makes the offline test suite depend on the absence
+      of a key.
+
+  - stage: 2
+    title: Multilingual tokenization
+    blog_ref: https://nosible.com/blog/the-road-to-cybernaut-1
+    modules:
+      - src/cybernaut_mini/query/s2_tokenize/tokenizer.py
+      - src/cybernaut_mini/query/s2_tokenize/segmentation.py
+      - src/cybernaut_mini/query/s2_tokenize/stemming.py
+      - src/cybernaut_mini/query/s2_tokenize/stopwords.py
+      - src/cybernaut_mini/query/s2_tokenize/languages.py
+    disclosed: >
+      One standardized interface wraps "probably a dozen or more different NLP packages"
+      and hides every language-specific complexity from the caller. Behind it: Unicode
+      normalization, sentence boundary detection, text segmentation, inflection,
+      stemming and stop-word removal. Stack: spaCy, pySBD, PyStemmer, jieba, MeCab, and
+      friends.
+    assumptions: >
+      The acceptance test is the post's own worked example: the bacteria-and-yeast
+      question must yield exactly {yeast, bacteria, safer, lesson, translat, gene,
+      medicin, edit, actual}. That single assertion pins the whole ordering — hyphens
+      split, function words are dropped before stemming, survivors are Snowball-stemmed.
+      The cached segmenters, stemmers and MeCab tagger are stateful and not thread-safe,
+      so each thread needs its own tokenizer, and they are unpicklable, so pickling drops
+      the caches and rebuilds them lazily.
+    alternatives: >
+      A naive whitespace tokenizer, or character bigrams for CJK, was rejected: the
+      post's own headline Japanese token is shredded into non-word bigrams by character
+      splitting, so the worked example cannot be reproduced without real morphological
+      analysis.
+
+  - stage: 3
+    title: Search-intent prediction
+    blog_ref: https://nosible.com/blog/the-road-to-cybernaut-1
+    modules:
+      - src/cybernaut_mini/query/s3_intents/intents.py
+      - src/cybernaut_mini/query/s3_intents/scoring.py
+      - src/cybernaut_mini/query/s3_intents/tokens.py
+      - src/cybernaut_mini/query/s3_intents/function_words.py
+    disclosed: >
+      A "search intent" is a sequence of proximal tokens carrying a high harmonic mean of
+      per-token TF-IDF, excluding function-word parts of speech — pronouns, determiners,
+      conjunctions, adverbs and friends. The harmonic mean is the point: it punishes any
+      n-gram that contains a common token, so a run is only an intent if every token in
+      it is informative.
+    assumptions: >
+      The post states the definition in a single sentence and prints neither the
+      harmonic-TF-IDF formula nor the function-word list, so this replica reads both off
+      that sentence and pins them by reproducing the post's worked example verbatim in
+      tests. Proximity means contiguity in the query, so "bacteria and yeast" is not one
+      intent — the conjunction sits between them and cuts the run.
+    alternatives: >
+      Reusing a raw-bigram proxy was rejected. It has no notion of a token being common
+      and no notion of a function word, so it promotes exactly the n-grams the post
+      excludes — the opposite of the disclosed behaviour.
+
+  - stage: 4
+    title: Instruction tuning and embedding
+    blog_ref: https://nosible.com/blog/the-road-to-cybernaut-1
+    modules:
+      - src/cybernaut_mini/query/s4_instruct/templates.py
+      - src/cybernaut_mini/query/s4_instruct/e5.py
+      - src/cybernaut_mini/query/s4_instruct/writer.py
+      - src/cybernaut_mini/query/s4_instruct/evolve.py
+      - src/cybernaut_mini/query/s4_instruct/selection.py
+    disclosed: >
+      An appropriate instruction is generated for the question and submitted together
+      with the expansions to intfloat/multilingual-e5-large-instruct. The post prints one
+      template verbatim and claims a good instruction is worth 1-5% precision and recall
+      for free. It says templates carry placeholders for named entities, geographic
+      regions and topics of interest, but prints only that one.
+    assumptions: >
+      Only the printed template is tagged Provenance.DISCLOSED; every variant is tagged
+      INFERRED and keeps the disclosed skeleton, varying only the focus clause. The post
+      attributes its gains to evolved templates, so a variant that drifted the skeleton
+      would no longer be reproducing the disclosed behaviour. The {Language} placeholder
+      is an English language name ("English", "Japanese"), not an ISO code — the post
+      shows the placeholder but never a filled example, and rendering "relevant ja
+      Headlines" would be silently degraded.
+    alternatives: >
+      Treating a missing placeholder as an empty string was rejected. The result —
+      "focus on the named entities , and provide substantive answers" — renders without
+      error and is invisible in the retrieval metrics, which is worse than raising.
+
+  - stage: 5
+    title: Shard selection
+    blog_ref: https://nosible.com/blog/the-road-to-cybernaut-1
+    modules:
+      - src/cybernaut_mini/query/s5_select/selector.py
+      - src/cybernaut_mini/query/s5_select/dense.py
+      - src/cybernaut_mini/query/s5_select/sparse.py
+    disclosed: >
+      The post calls this "arguably the single most important stage", because routing to
+      the wrong shards loses the best documents before retrieval starts. Four ranking
+      factors — Vanilla Dense, Bayesian Dense, Vanilla Sparse and Entity Sparse — are
+      combined with reciprocal rank fusion, which the post describes as "a simple but
+      powerful ensembling method" that stays robust when one factor is noisy. Dense
+      selection runs over an HNSW graph; the sparse factors are TF-IDF.
+    assumptions: >
+      This replica ships three factors, not four. The Bayesian Dense selector is withheld
+      as patent-pending and the post says nothing about it — not the prior, not the
+      likelihood, not what is being estimated — so its absence is reported at runtime in
+      ShardSelectionSignals.omitted_factors, and selection quality is expected to sit
+      below the post's as a result. Per-factor candidate depth (100 shards by default,
+      taken from the post's "+97 others") is inferred: the post does not say whether each
+      factor produces a full ranking or a truncated one, and truncation is what makes the
+      stage sublinear.
+    alternatives: >
+      Inventing a plausible Bayesian reranker under that name was rejected as the worst
+      of both worlds: it would not be NOSIBLE's method, and a reader comparing the code
+      to the post would conclude the withheld factor had been reconstructed when it had
+      only been guessed at.
+
+  - stage: 6
+    title: Shard reranking
+    blog_ref: https://nosible.com/blog/the-road-to-cybernaut-1
+    modules:
+      - src/cybernaut_mini/query/s6_rerank/fusion.py
+      - src/cybernaut_mini/query/s6_rerank/bloom.py
+      - src/cybernaut_mini/query/s6_rerank/compression.py
+      - src/cybernaut_mini/query/s6_rerank/neural.py
+      - src/cybernaut_mini/query/s6_rerank/pagerank.py
+    disclosed: >
+      Four rerankers, fused once more with reciprocal rank fusion: a bloom-filter
+      reranker that downranks shards whose phrase bloom never saw the query's intents; a
+      compression reranker, where the shard whose trained Zstandard dictionary compresses
+      the query best wins; a neural reranker over shard titles,
+      BAAI/bge-reranker-v2-m3; and Personalized PageRank over a shard kNN graph. The post
+      notes that LLM reranking works but its latency is too high.
+    assumptions: >
+      Every reranker and the stage-5 prior carries equal weight, because the post gives
+      no weights and this repo has no stage-6 relevance judgments to fit them on; an
+      unequal default would be a fabricated number that merely looked tuned. The neural
+      reranker is opt-in, needing the optional st extra and roughly a 2.3 GB download.
+      The RRF constant is k=60, the paper's value and this repo's default everywhere. A
+      reranker that scores every candidate identically abstains and is dropped, rather
+      than contributing the tie-break order — which would quietly double stage 5's weight.
+    alternatives: >
+      Cascading the rerankers instead of fusing them was rejected: the post fuses, and a
+      bloom zero on a shard that is nonetheless relevant would become unrecoverable,
+      where fusion lets the other three outvote it. Dropping candidates with a zero bloom
+      score was also rejected — "downranked" is not "removed", and stage 8 needs a full
+      ordering of the selected shards to fan out over.
+
+  - stage: 7
+    title: Shard-based question expansion
+    blog_ref: https://nosible.com/blog/the-road-to-cybernaut-1
+    modules:
+      - src/cybernaut_mini/query/s7_expand/graph.py
+      - src/cybernaut_mini/query/s7_expand/expand.py
+      - src/cybernaut_mini/query/s7_expand/selection.py
+    disclosed: >
+      Each shard's synonym graph is used to probabilistically expand the search terms.
+      The claim rests on coherence: because a shard is lexically and semantically
+      coherent, its synonyms are unambiguous — "gene" in shard 11,343 only has the
+      genetic meaning. Stack: NumPy. Additions are capped so the original words are not
+      drowned out.
+    assumptions: >
+      The post never says what a synonym-graph edge weight means, so this module reads
+      the co-occurrence term graph the index actually builds and L1-normalises each
+      node's outgoing edges into a distribution over neighbours. That normalization is
+      what makes "probabilistically" literally true and what lets mass be summed across
+      the routed shards and compared between graphs of very different densities. The
+      one-shard-one-sense claim is a property of the graphs, not of this code: a build
+      that copied one global graph into every manifest would destroy it undetectably.
+    alternatives: >
+      Raw unnormalised edge weights were rejected, because a candidate's score would then
+      depend on how many neighbours its source term happens to have — a property of the
+      shard's vocabulary size rather than of the candidate. Two-hop or transitively
+      closed expansion was rejected as well: two hops is exactly where "gene" reaches
+      "Willy Wonka" even inside a coherent shard.
+
+  - stage: 8
+    title: Retrieval using map-reduce
+    blog_ref: https://nosible.com/blog/the-road-to-cybernaut-1
+    modules:
+      - src/cybernaut_mini/query/s8_retrieve/pipeline.py
+      - src/cybernaut_mini/query/s8_retrieve/mapreduce.py
+      - src/cybernaut_mini/query/s8_retrieve/intent_scan.py
+      - src/cybernaut_mini/query/s8_retrieve/snippets.py
+    disclosed: >
+      The package of embeddings, expansions, intents and 10-30 shard ids is broadcast.
+      Each shard filters, searches lexically, searches semantically, fuses its two
+      rankings, and runs a full-text Aho-Corasick pass over its top results for the
+      intents. Results are then grouped by document id, snippetted to a user-chosen
+      maximum length, and about 100 come back.
+    assumptions: >
+      The full-text intent pass runs over a window of the fused ranking that defaults to
+      twice the result limit. The post says "top results" without a number; twice the
+      returned count is the smallest window in which a promotion can still change which
+      documents make the cut, and it bounds the full texts that must be read to
+      2 * result_limit, which is what makes the pass affordable at a million documents.
+      The snippet maximum is capped at 500 characters where the result model validates
+      it, and asking for more raises rather than silently truncating.
+    alternatives: >
+      Re-embedding or re-tokenising the question in stage 8 was rejected: stages 2-4 own
+      that work and stage 8 receives their output in the broadcast package, exactly as
+      the post describes. Returning bare result objects was rejected too, because the
+      intent-scan evidence is the most interesting thing this stage produces and the
+      result model forbids extra fields.

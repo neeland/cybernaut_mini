@@ -8,6 +8,59 @@ This repo uses a planner-builder-reviewer workflow.
 - Implementation should be delegated to cheaper coding agents whenever possible.
 - Keep behavior simple, interpretable, and file-based.
 
+## Documentation contract
+
+This repository exists to *teach* the architecture described in the NOSIBLE
+Cybernaut posts. Documentation is therefore a functional requirement, not a
+nicety: a module without its blog reference, stated assumptions, and rejected
+alternatives has failed at its only job. The convention is executable, so it
+cannot rot silently.
+
+What must hold:
+
+- Every Python package directory under `src/` (any directory containing an
+  `__init__.py`) and every top-level directory in `REQUIRED_README_DIRS` has a
+  `README.md` containing a ```` ```mermaid ```` fence.
+- Every substantive module in `src/` and `tools/` carries a module docstring with
+  three sections: `Blog ref:`, `Assumptions:`, and `Alternatives considered:`.
+  A trivial `__init__.py` is exempt.
+- Every `data/00_reference/*.md` path cited anywhere resolves to a real file, and
+  every "Blog Stage N" citation is within stages 1–8.
+- No credential shapes reach git history.
+- A module with nothing to say may opt out explicitly, with a reason:
+  `docs-check: exempt(pure re-export, no behaviour)`.
+
+How to run it:
+
+```bash
+make docs-check                      # whole repo
+python3 tools/docs_check.py --staged # staged files only (pre-commit hook mode)
+python3 tools/docs_check.py --summary  # counts, no per-violation detail
+```
+
+It is stdlib-only on purpose, so it runs inside a git hook where the project
+virtualenv may not be active.
+
+Enforcement: `make check` runs it, the tracked pre-commit hook runs it in
+`--staged` mode, and CI runs it on every push. Note that README coverage is
+checked repo-wide even in `--staged` mode — deleting a README elsewhere still
+fails the commit, because the contract is a property of the repository rather
+than of the diff.
+
+Adding a new package directory therefore means adding its `README.md` in the same
+change. Plan for it.
+
+## Real-data rule
+
+**This project never uses dummy data.** Synthetic corpora and fabricated
+relevance judgments silently poison every downstream metric and every published
+number, so their return is a hard failure rather than a warning.
+
+- Evaluation runs against real human relevance judgments only (MIRACL qrels).
+- Fixtures are real documents, committed with attribution (`data/ATTRIBUTION.md`,
+  `data/LICENSE-DATA`).
+- Data carries its own licence, separate from the code's MIT licence.
+
 ## Roles
 
 ### Planner

@@ -2,6 +2,36 @@
 
 Vectors must be L2-normalized float32 arrays; cosine similarity is then just the
 dot product. All repair and balancing steps are deterministic given the same seed.
+
+Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — "Today we are 250,000
+    search engines": sharding is how the post turns a corpus into independently
+    addressable units, and the coherence stage 5 relies on starts here. Local copy:
+    ``data/00_reference/the-road-to-cybernaut-1.md``.
+
+Assumptions:
+    - Callers pass L2-normalized float32 rows, so cosine similarity is a dot product.
+      This module normalizes the centroids it computes but does not re-normalize the
+      input matrix; a caller that skips normalization gets silently wrong shards.
+    - ``MiniBatchKMeans(n_init=3, batch_size=1024)``. 1024 is above sklearn's
+      ``3 x n_clusters`` quality floor even at 256 shards and measured ~2x faster than
+      256 on a 200k x 384 build.
+    - Every shard is non-empty on return. MiniBatchKMeans can emit empty clusters, so
+      they are repaired from the largest shard before balancing, and a final
+      postcondition asserts the invariant rather than trusting it.
+    - Balancing moves a member while any shard exceeds ``1.5 x mean_size``; the donor
+      is the largest shard and the target is the nearest below-mean shard, with ties
+      broken by lowest shard id or row index.
+    - The whole procedure is deterministic for a fixed ``(vectors, n_shards, seed)``.
+
+Alternatives considered:
+    - Full-batch ``KMeans``: better cluster quality, rejected because it does not
+      finish in a reasonable time on the 200k-document target build.
+    - Leaving empty clusters in place, as sklearn permits: rejected because the router
+      and the on-disk shard manifests both assume exactly ``n_shards`` addressable
+      shards with a centroid each.
+    - Re-running k-means with new initialisations until the sizes are acceptable:
+      rejected because it makes the output depend on a retry loop rather than on the
+      seed alone.
 """
 
 from __future__ import annotations

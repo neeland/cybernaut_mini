@@ -14,7 +14,7 @@ Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — stage 6, Page (Re
     algorithm to produce a probability mass over your selected shards". Local copy:
     ``docs/blog-archive/the-road-to-cybernaut-1.md``.
 
-Assumptions (the post gives no parameters at all; all four are [inferred]):
+Assumptions: (the post gives no parameters at all; all four are [inferred])
     - **Graph scope.** Nodes are the *selected* shards only, not the whole index. The
       post says "a probability mass over your selected shards", and a graph over all
       1,000 shards would leak mass to shards stage 5 excluded, which stage 6 cannot

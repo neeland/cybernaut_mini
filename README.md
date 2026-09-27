@@ -10,6 +10,11 @@ the NOSIBLE Cybernaut posts:
 parity. It is a clean-room, educational implementation written for learning
 purposes only.**
 
+New here? Start with the clean-room build guide,
+[`docs/REVERSE_ENGINEERING_GUIDE.md`](docs/REVERSE_ENGINEERING_GUIDE.md), then follow
+[`docs/LEARNING_PATH.md`](docs/LEARNING_PATH.md) in order. The
+[repository map](#repository-map) below lists everything else in the tree.
+
 ---
 
 ## Architecture
@@ -33,6 +38,34 @@ counter, which makes them unsuitable for a static DAG. A separate Kedro
 
 `kedro viz` renders both pipeline DAGs when the optional `[viz]` extra is
 installed.
+
+---
+
+## Repository map
+
+Everything above describes the **SEARCH** pillar: sharded hybrid retrieval plus the
+three-stage agent. That is the part of NOSIBLE's stack this repo replicates most
+completely, but it is not the whole repository. The table below is the entry point for
+the rest.
+
+| Subsystem | Where | Guide | Read first | Run |
+|---|---|---|---|---|
+| Clean-room build guide | [`docs/`](docs/README.md) | all | [`REVERSE_ENGINEERING_GUIDE.md`](docs/REVERSE_ENGINEERING_GUIDE.md) | — |
+| Guided path | [`docs/LEARNING_PATH.md`](docs/LEARNING_PATH.md) | all | the file itself | — |
+| Measured notebooks | [`notebooks/`](notebooks/README.md) | §1 | [`notebooks/README.md`](notebooks/README.md) | `make notebooks` |
+| Core: sharding, routing, retrieval, RRF, evals | [`src/cybernaut_mini/`](src/cybernaut_mini/README.md) | §1 | [`src/cybernaut_mini/README.md`](src/cybernaut_mini/README.md) | `cybernaut-mini build` / `search` / `eval` |
+| Agent search | [`agent/`](src/cybernaut_mini/agent/README.md) | §2 | [`agent/README.md`](src/cybernaut_mini/agent/README.md) | `cybernaut-mini search --mode agent` |
+| 8-stage query pipeline | [`query/`](src/cybernaut_mini/query/README.md) | §1 | [`query/README.md`](src/cybernaut_mini/query/README.md) | `cybernaut-mini explain --stage 5` |
+| Model providers (embed / judge / rewrite) | [`providers/`](src/cybernaut_mini/providers/README.md) | §1, §2 | [`providers/README.md`](src/cybernaut_mini/providers/README.md) | `--config configs/neural.yaml` |
+| Kedro pipelines | [`pipelines/`](src/cybernaut_mini/pipelines/README.md) | build + eval | [`pipelines/README.md`](src/cybernaut_mini/pipelines/README.md) | `make pipelines`, `make viz` |
+| WORLD: events to risk/uncertainty series | [`world/`](src/cybernaut_mini/world/README.md) | §4, §6, §8 | [`world/README.md`](src/cybernaut_mini/world/README.md) | — |
+| Sentiment lab: labelers, ensemble, distil | [`sentiment/`](src/cybernaut_mini/sentiment/README.md) | §3 | [`sentiment/README.md`](src/cybernaut_mini/sentiment/README.md) | — |
+| Self-organising entity facets | [`entities/`](src/cybernaut_mini/entities/README.md) | §7b | [`entities/README.md`](src/cybernaut_mini/entities/README.md) | — |
+
+`§n` refers to sections of the [build guide](docs/REVERSE_ENGINEERING_GUIDE.md), which
+maps each one back to the public posts it was reverse-engineered from. The guide's §9
+proposes a build order for the whole replica; `docs/LEARNING_PATH.md` turns it into
+commands to run here.
 
 ---
 
@@ -293,26 +326,45 @@ Config: `configs/tiny.yaml` (hash embedder, 8 shards, seed 42)
 
 ## Evaluation results (fixture corpus, offline, seed 42)
 
-Run: `uv run cybernaut-mini eval --index artifacts/fixture --judgments data/01_raw/fixtures/judgments.jsonl --config configs/tiny.yaml --offline`
+Reproduced with:
+
+```bash
+uv run cybernaut-mini eval \
+  --index artifacts/fixture \
+  --judgments data/01_raw/fixtures/judgments.jsonl \
+  --config configs/tiny.yaml \
+  --offline
+```
+
+Corpus: the committed real fixture slice — MIRACL en-dev passages plus CC-News
+articles, 460 documents — against 25 MIRACL queries with real graded judgments.
+`configs/tiny.yaml` selects the `hash` embedder and 8 shards, so this is the offline,
+byte-deterministic configuration. It demonstrates mechanisms; it does not measure
+retrieval quality.
 
 ```
 Mode           Recall@5    Recall@10       MRR@10      nDCG@10    Ret calls    LLM calls   Wall (s) (informational)
 -------------------------------------------------------------------------------------------------------------------
-lexical          0.5972       0.6944       0.9583       0.7935          1.0          0.0                       0.01
-dense            0.5833       0.6111       1.0000       0.7902          1.0          0.0                       0.01
-hybrid           0.6111       0.6528       0.8194       0.7019          1.0          0.0                       0.01
-agent            0.6528       0.6944       0.8194       0.7140          6.3          0.0                       0.21
+lexical          0.4673       0.8793       1.0000       0.6017          1.0          0.0                       0.17
+dense            0.4353       0.7573       1.0000       0.5346          1.0          0.0                       0.15
+hybrid           0.4753       0.9053       1.0000       0.5885          1.0          0.0                       0.20
+agent            0.4607       0.7340       1.0000       0.4953         10.1          0.0                       6.77
 ```
 
-**When agent mode underperforms baseline hybrid:** On this small synthetic corpus
-(63 docs, 12 queries) the agent mode does not consistently beat hybrid. In this
-run, agent achieves higher Recall@5 and Recall@10 but lower MRR@10 and nDCG@10
-than the simple lexical baseline. This is expected: the three-stage search is
-designed to add value when the retrieval space is large and a good initial query
-is hard to formulate. On 63 documents, a single BM25 or cosine call often
-retrieves the top result on the first try, and 6.3 extra retrieval calls per
-query add overhead without proportional quality gain. On a real-scale index
-(250 k+ shards), routing and refinement would provide substantially more benefit.
+Wall times come from one Apple-silicon machine and are informational only.
+
+**The agent loses on this corpus, and publishing that is the point.** Every mode puts
+the right document at rank 1 (MRR@10 = 1.0000 across the board), and the agent is the
+*worst* mode on Recall@10 and nDCG@10 — 0.7340 and 0.4953, against hybrid's 0.9053 and
+lexical's 0.6017 — while spending ~10 retrieval calls per query instead of 1. The
+three-stage search is designed to pay off when the retrieval space is large and a good
+initial query is hard to formulate; at 460 documents a single BM25 or cosine call
+already surfaces the answer, so routing and refinement add cost without proportional
+quality. On a real-scale index (250k+ shards) the tradeoff is expected to move the
+other way. This replica does not claim that it does.
+
+The same question is computed independently, and reaches the same conclusion, in
+[`notebooks/03_retrieval_evaluation.ipynb`](notebooks/03_retrieval_evaluation.ipynb).
 
 ---
 
@@ -328,7 +380,7 @@ query add overhead without proportional quality gain. On a real-scale index
 | Hash embedder dim | 256 (tiny: 256, tests: 64) | `hashlib.blake2b` token+char-trigram buckets, L2-norm |
 | spaCy | Optional `[nlp]` extra | Regex fallback tested by default; `en_core_web_sm` auto-detected |
 | Byte-for-byte determinism | Same seed + provider + sklearn version -> identical | `canonical_dumps` + float32 npy |
-| tiny.yaml shards | 8 | ~7-8 docs/shard for 63-doc corpus |
+| tiny.yaml shards | 8 | ~57 docs/shard for the 460-doc fixture |
 | default.yaml shards | 12 | Default per spec |
 
 ---
@@ -368,8 +420,9 @@ violates. `kedro viz` renders only the `index_build` and `evaluation` pipelines.
   - `sentence_transformers` — the quality ceiling. Needs `uv sync --extra st` (or
     `make install-prod`) and internet on first run; opt in with
     `--config configs/default.yaml` (CLI) or `--env prod` (Kedro).
-- **Small corpus.** The 63-doc synthetic corpus is for testing; metric numbers
-  above should not be extrapolated to real workloads.
+- **Small corpus.** The 460-document fixture is for testing. It holds real documents
+  and real judgments, but the metric numbers above should not be extrapolated to real
+  workloads.
 - **sklearn version drift.** KMeans output depends on the installed sklearn
   version. Byte-identical builds are guaranteed within the same environment only.
 - **rank-bm25.** Unmaintained but stable for educational use.

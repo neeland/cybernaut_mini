@@ -11,11 +11,44 @@ Two entry points share this module:
     into it; without one, ``kedro run`` / ``catalog`` / ``registry`` / ``viz``
     all abort with "Cannot load commands". Keeping it empty means Kedro's
     commands stay exactly as Kedro defines them.
+
+Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — the CLI is the whole
+    eight-stage pipeline behind four verbs: ``build`` (stages 1-6), ``search``
+    (stages 5-8, plus the Cybernaut-1 agent), ``inspect-shards`` (stage 5's output)
+    and ``eval``. Local copy: ``data/00_reference/the-road-to-cybernaut-1.md``.
+
+Assumptions:
+    - ``build`` shells into a real ``KedroSession`` and runs ``index_build``, so a CLI
+      build and ``kedro run --pipeline index_build`` write identical artifacts. It is
+      not a private re-implementation of the pipeline nodes.
+    - ``search`` and ``eval`` do not open a Kedro session: agent search branches at
+      runtime with a shared budget counter, which a static DAG cannot express, so
+      they call ``run_agent_search`` / ``evaluate`` directly.
+    - ``--json`` writes only to stdout and progress logging goes to stderr, so
+      ``cybernaut-mini search ... --json | jq`` stays parseable.
+    - ``--mode`` is validated before the index is loaded, so a typo fails in
+      milliseconds rather than after a multi-gigabyte ``embeddings.npy`` mmap.
+    - ``--offline`` is enforced by ``AppConfig.require_offline_compatible`` for
+      ``build``, ``search --mode agent`` and ``eval``; plain static search has no
+      config to check because it has no model-backed component.
+
+Alternatives considered:
+    - Calling the index-build nodes directly from ``build``: fewer moving parts, but
+      it makes the CLI a second build entry point that can drift from the Kedro
+      pipeline and disappears from ``kedro viz`` lineage. Rejected.
+    - Routing ``eval`` through the Kedro ``evaluation`` pipeline: rejected for the CLI
+      because the extra session costs more than it adds for a single call; the
+      pipeline stays registered for ``kedro run --pipeline evaluation``.
+    - A separate module for the Kedro Click group: rejected because ``kedro``
+      discovers ``cybernaut_mini.cli:cli`` and a second file would only split one
+      interface across two.
 """
 
 from __future__ import annotations
 
 import json
+import logging
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -35,6 +68,14 @@ def cli() -> None:
 @app.callback()
 def main() -> None:
     """cybernaut-mini: sharded hybrid retrieval with a three-stage search agent."""
+    # Progress logging for long-running commands (eval, search). Stderr, never
+    # stdout: --json output must stay pipeable. No-op when a handler already
+    # exists (e.g. Kedro configures its own inside `build`).
+    logging.basicConfig(
+        level=logging.INFO,
+        stream=sys.stderr,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
 
 
 @app.command()
@@ -400,6 +441,34 @@ def eval_cmd(
                 f" {m.mean_retrieval_calls:>{col_w}.1f} {m.mean_llm_calls:>{col_w}.1f}"
                 f" {m.wall_clock_seconds:>26.2f}"
             )
+
+
+@app.command()
+def explain(
+    stage: Annotated[
+        int | None,
+        typer.Option("--stage", help="Blog stage to explain, 1-8. Omit to print all eight."),
+    ] = None,
+) -> None:
+    """Explain a stage of the query pipeline: what it does, assumed, and rejected.
+
+    The text is read from `configs/learn/curriculum.yaml`, not from this module, so
+    the teaching content can be edited without touching code.
+    """
+    from cybernaut_mini.config import ConfigError
+    from cybernaut_mini.curriculum import format_lesson, load_curriculum
+
+    try:
+        curriculum = load_curriculum()
+        lessons = (curriculum.by_stage(stage),) if stage is not None else curriculum.ordered
+    except ConfigError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+
+    for position, lesson in enumerate(lessons):
+        if position:
+            typer.echo("")
+        typer.echo(format_lesson(lesson))
 
 
 def _unwrap_exception(exc: BaseException) -> BaseException:

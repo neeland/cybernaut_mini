@@ -4,6 +4,42 @@ UCT(i) = mean_value(i) + c * sqrt(ln(N_parent + 1) / (N_i + 1))
 
 Selection order: unvisited children first (in action_sort_key order), then highest
 UCT with ties broken by action type name and normalized action payload.
+
+Blog ref: https://nosible.com/blog/introducing-cybernaut-1-agentic-search-with-mcts —
+    the post describes balancing "exploration, exploitation, and inference cost"
+    over a search tree but discloses no reward function, no UCT constant, no tree
+    width and no depth. Everything numeric here is the build plan's choice.
+    Local copy:
+    ``docs/blog-archive/introducing-cybernaut-1-agentic-search-with-mcts.md``.
+
+Assumptions:
+    - UCT uses the +1-smoothed form ``Q(i) + c*sqrt(ln(N_parent+1)/(N_i+1))``.
+      The unsmoothed ``Q = total/visits`` is 0/0 on a fresh child; the smoothing
+      is what makes the first visit well defined, and at the root the exploration
+      term for an unvisited child is ``c*sqrt(ln 1 / 1) = 0``.
+    - Unvisited children are expanded before any UCT comparison, in
+      ``action_sort_key`` order. This modifies textbook UCT: the first sweep of a
+      freshly expanded node becomes a deterministic enumeration of its actions
+      rather than a value comparison in which every child scores zero.
+    - Backpropagation adds the leaf reward unchanged to every ancestor. There is
+      no discount factor: the post states none, and discounting would make a
+      node's mean value depend on the depth at which it happened to be reached,
+      which a fixed 18-call budget does not justify.
+    - ``SearchNode`` is mutable and owns its visit counters. Exactly one agent
+      writes a tree; traces read the frozen values copied into ``NodeTrace``
+      rather than the live node, so a trace cannot change after the run.
+
+Alternatives considered:
+    - Full MCTS with rollouts to a terminal state: the textbook way to estimate
+      an unexpanded child's value, and what the build guide suggests. Rejected
+      because every rollout step is a real retrieval call, so random playouts
+      would consume the same 18-call budget the search exists to allocate.
+    - PUCT / AlphaZero-style selection with a learned prior: strictly better when
+      a policy network is available, but the post discloses no policy model and
+      this replica has no network to train one against.
+    - Plain best-first (greedy) selection: no exploration term at all, so the
+      first candidate's descendants would take the whole budget and the disclosed
+      wide-to-narrow shape would never happen.
 """
 
 from __future__ import annotations

@@ -7,6 +7,39 @@ Every path the corpus and the index travel goes through a dataset in this module
 so the catalog — not a node body — owns all file and network I/O. That is what makes
 ``kedro-viz`` show real lineage and what lets ``conf/prod`` swap a local corpus for a
 Hugging Face one without touching pipeline code.
+
+Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — the corpus this project
+    builds from is the news stream the post's pipeline consumes, and the datasets here
+    are the catalog seam that lets blog stages 1-2 read a local slice offline or a
+    pinned Hub revision in production. Local copy:
+    ``data/00_reference/the-road-to-cybernaut-1.md``.
+
+Assumptions:
+    - Every JSON-bearing dataset writes through ``canonical_dumps`` (sorted keys,
+      compact separators, floats rounded to 8 decimal places). The byte-identical
+      rebuild guarantee is a property of that writer, not of the pipeline nodes.
+    - Writes into ``PROTECTED_DIRS`` (``data/01_raw/fixtures``, ``data/00_reference``)
+      are refused with ``DatasetError``; reads from them are ordinary. A pipeline run
+      must not be able to rewrite the golden corpus the determinism tests compare to.
+    - Saves are atomic: write a ``.tmp`` sibling, then ``replace``. A crash mid-save
+      leaves the previous file intact rather than a truncated artifact.
+    - ``HuggingFaceDataset`` requires a pinned commit SHA or tag. ``main``, ``master``,
+      ``head``, ``refs/heads/main`` and the shipped ``replace_with_commit_sha``
+      placeholder are rejected at construction, before a byte is downloaded.
+    - The optional ``hf`` extra is imported inside ``load``, so the core package and
+      the whole offline test suite never import ``datasets``.
+
+Alternatives considered:
+    - Stock Kedro ``JSONDataset`` / ``PartitionedDataset``: rejected because they
+      serialise with ``json.dump`` defaults, which do not sort keys or fix float
+      formatting, breaking the byte-for-byte rebuild that ``test_reproducibility.py``
+      asserts.
+    - Guarding the fixture directories inside pipeline nodes: rejected because I/O
+      belongs to the catalog — one guard covers every pipeline and keeps ``kedro viz``
+      lineage honest — and a node-level guard is bypassed by any new node.
+    - ``IterableDataset.select_columns`` for streaming projection: rejected in favour
+      of a per-row dict comprehension, which does not depend on the exact ``datasets``
+      version and avoids another lazy wrapper.
 """
 
 from __future__ import annotations

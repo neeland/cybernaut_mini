@@ -25,7 +25,7 @@ Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — stage 8, "Retriev
     substitutions this replica does not need at its scale [inferred]. Local copy:
     ``docs/blog-archive/the-road-to-cybernaut-1.md``.
 
-Assumptions (each argued where it is implemented):
+Assumptions: (each argued where it is implemented)
     - An intent match reranks; it never filters and never adds an unbounded bonus —
       see :mod:`.refine`.
     - Phrase matches respect word boundaries in spaced scripts and ignore them in

@@ -3,6 +3,36 @@
 The regex fallback is the tested default: NFKC -> lowercase -> ``[a-z0-9]+`` tokens ->
 stopword removal, no lemmatization, no entities. The spaCy path activates only when
 ``en_core_web_sm`` is importable and ``use_spacy`` allows it.
+
+Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — stage 2, "Multilingual
+    Tokenization". That stage is multilingual in the post; this replica's offline
+    default is an English regex path, with spaCy opt-in. Local copy:
+    ``data/00_reference/the-road-to-cybernaut-1.md``.
+
+Assumptions:
+    - The regex backend is the tested default. ``use_spacy=False`` pins it even on a
+      machine where ``en_core_web_sm`` is installed, so results never depend on an
+      optional model being present.
+    - ``normalize`` NFKC-normalizes and collapses whitespace but preserves case;
+      ``lexical_form`` is the lowercasing wrapper. Tokens are ``[a-z0-9]+`` runs of the
+      lowercased form.
+    - The 156-word stopword list is inlined in this module, so tokenization needs no
+      corpus download. There is no stemming or lemmatization on the regex path.
+    - ``entities`` returns an empty list on the regex path rather than raising, so
+      callers must tolerate an entity-free index; the fixture build does exactly that.
+    - ``use_spacy=True`` raises ``RuntimeError`` when the model is unavailable, while
+      ``use_spacy=None`` silently auto-detects. The asymmetry is deliberate: an
+      explicit request that cannot be honoured is an error, an implicit one is not.
+
+Alternatives considered:
+    - Making spaCy a core dependency: rejected because a bare offline install must
+      tokenize, and every test pins the regex path anyway.
+    - NLTK's stopword corpus: rejected because it needs a one-time download that would
+      break the offline quick start; the list is small enough to inline.
+    - Reusing ``query.s2_tokenize``'s multilingual stack (Snowball, PySBD, jieba,
+      MeCab) here: rejected because this module is the dependency-light fallback used
+      by index build and tests, and importing the query stage would make the simple
+      path depend on the heavier one.
 """
 
 from __future__ import annotations

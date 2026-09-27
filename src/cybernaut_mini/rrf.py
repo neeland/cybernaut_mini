@@ -2,6 +2,31 @@
 
 RRF(item) = sum over rankers r of w_r / (k + rank_r(item)), with 1-based ranks.
 Ties in the fused score break by ascending item ID so ordering is deterministic.
+
+Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — the post fuses ranking
+    factors with reciprocal rank fusion at stage 5 (shard selection), stage 6 (shard
+    reranking) and stage 8 (retrieval), calling RRF "a simple but powerful ensembling
+    method". Local copy: ``data/00_reference/the-road-to-cybernaut-1.md``.
+
+Assumptions:
+    - Ranks are 1-based and ``k`` defaults to 60, the constant the post's linked RRF
+      explainer uses; every caller in this repo relies on that default.
+    - Weight is per ``RankedList``, not global, so the same item can be weighted
+      differently by the selector and the reranker.
+    - Ties break by ascending item id, so a fused ordering is reproducible for a given
+      input regardless of dict iteration order.
+    - A ranker's optional ``scores`` are carried through verbatim for inspection and
+      never alter the fused score; only rank position contributes.
+    - Repeated ids within one ranked list are not deduplicated: the caller owns the
+      list's well-formedness, and silently collapsing it would hide an upstream bug.
+
+Alternatives considered:
+    - Score normalisation (CombSUM / min-max) before summation: rejected because RRF's
+      whole point is robustness to incomparable score scales, which the post names.
+    - ``ranx`` or a ``pytrec_eval`` fusion helper: rejected as a dependency for a
+      ~15-line function whose ``contributions`` dict is what the trace actually needs.
+    - Sorting by fused score only and letting ties fall where they may: rejected
+      because the trace and the eval harness both compare orderings across runs.
 """
 
 from __future__ import annotations

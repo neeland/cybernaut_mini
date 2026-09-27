@@ -1,9 +1,9 @@
-.PHONY: install install-mac install-prod env accel test lint typecheck check \
+.PHONY: install install-mac install-prod env hooks accel test lint typecheck format-check docs-check check \
 	build-fixture search-fixture eval-fixture \
 	ingest ingest-prod build-prod eval-pipeline viz pipelines \
 	notebooks lab entire doctor
 
-install: env
+install: env hooks
 	uv sync
 
 # ------------------------------------------------------------------ #
@@ -28,6 +28,11 @@ install-prod: env
 env:
 	python3 scripts/sync_env.py
 
+# Install the tracked git hooks. `.git/hooks` is not version-controlled, so a
+# fresh clone has no enforcement until this runs once; `make install` calls it.
+hooks:
+	scripts/install_hooks.sh
+
 # Install the Entire CLI and (re)wire its git + Claude Code hooks. Run after a
 # release bumps the hook format, or whenever commits print the "[entire] ... not
 # installed" warning. Also runs on devcontainer create.
@@ -48,7 +53,20 @@ lint:
 typecheck:
 	uv run mypy src
 
-check: lint typecheck test
+# Formatting is a separate concern from linting: `ruff check` enforces rules, this
+# catches drift the formatter would rewrite. Kept out of `check` because a
+# formatter rewrite is a reviewable change, not a pass/fail nit.
+format-check:
+	uv run ruff format --check .
+
+# The documentation contract: every package README has a mermaid diagram, every
+# module cites its blog stage, assumptions and rejected alternatives, and no
+# credential or synthetic corpus reaches git. Stdlib-only, so it also runs from
+# the pre-commit hook where the virtualenv may not be active.
+docs-check:
+	python3 tools/docs_check.py
+
+check: lint typecheck docs-check test
 
 build-fixture:
 	uv run cybernaut-mini build \

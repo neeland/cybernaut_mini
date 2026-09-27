@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Enforce the documentation contract before a commit exists.
+#
+# The contract is defined in AGENTS.md and implemented by tools/docs_check.py.
+# It runs in --staged mode here so an unrelated pre-existing violation elsewhere
+# in the tree does not block your commit — except for README coverage, which is
+# always checked repo-wide because it is a property of the repository, not of
+# the diff.
+#
+# Deliberately stdlib-only and dependency-free: a hook that needs `uv sync`
+# before it can run is a hook people disable. The checker imports nothing
+# outside the standard library for exactly this reason.
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+python3 tools/docs_check.py --staged
