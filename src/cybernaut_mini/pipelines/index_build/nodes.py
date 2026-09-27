@@ -34,7 +34,9 @@ Alternatives rejected: computing one graph over the whole corpus and assigning i
 from __future__ import annotations
 
 import json
+import logging
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -61,9 +63,14 @@ from cybernaut_mini.providers.embeddings import (
 from cybernaut_mini.sharding import shard_documents
 from cybernaut_mini.text import TextProcessor
 
+logger = logging.getLogger(__name__)
+
 #: Number of documents encoded per cache chunk.  At 200k docs this produces
 #: 40 chunks of 5k each; a crash loses at most one chunk's worth of work.
 EMBED_CHUNK_SIZE = 5_000
+
+#: Emit a progress line every this many documents in per-document node loops.
+LOG_EVERY_DOCS = 10_000
 
 
 def _embed_cache_dir(config: EmbeddingConfig) -> Path:
@@ -120,9 +127,7 @@ def _embed_with_cache(
         Override the cache directory; useful for tests that inject a
         ``tmp_path`` so they never touch ``data/``.
     """
-    import logging
-
-    _log = logging.getLogger(__name__)
+    _log = logger
 
     resolved_cache = cache_dir if cache_dir is not None else _embed_cache_dir(config)
     resolved_cache.mkdir(parents=True, exist_ok=True)
@@ -202,13 +207,27 @@ def process_text(
     - ``"entities"``: mapping doc_id -> list of entity strings
     """
     processor = TextProcessor(use_spacy=None)
+    start = time.monotonic()
+    logger.info("process_text: tokenizing %d document(s) ...", len(documents))
     tokens: dict[str, list[str]] = {}
     entities: dict[str, list[str]] = {}
-    for raw in documents:
+    for done, raw in enumerate(documents, start=1):
         doc = Document.model_validate(raw)
         combined = f"{doc.title}\n{doc.text}"
         tokens[doc.id] = processor.content_tokens(combined)
         entities[doc.id] = processor.entities(combined)
+        if done % LOG_EVERY_DOCS == 0:
+            logger.info(
+                "process_text: %d/%d document(s), %.0fs elapsed",
+                done,
+                len(documents),
+                time.monotonic() - start,
+            )
+    logger.info(
+        "process_text: done, %d document(s) in %.1fs",
+        len(documents),
+        time.monotonic() - start,
+    )
     return {"tokens": tokens, "entities": entities}
 
 
@@ -227,10 +246,9 @@ def embed_documents(
     selected) — the most common cause of a 10-20x throughput regression that
     otherwise appears only in wall-clock time after a full build.
     """
-    import logging
     import platform
 
-    _log = logging.getLogger(__name__)
+    _log = logger
 
     config = EmbeddingConfig.model_validate(embedding_params)
     provider = create_embedding_provider(config, offline=offline)
@@ -271,7 +289,14 @@ def shard(
     """
     vectors = np.array(vectors_list, dtype=np.float32)
     index_config = IndexConfig.model_validate(index_params)
+    start = time.monotonic()
+    logger.info(
+        "shard: clustering %d vector(s) into %d shard(s) ...",
+        vectors.shape[0],
+        index_config.n_shards,
+    )
     result = shard_documents(vectors, n_shards=index_config.n_shards, seed=seed)
+    logger.info("shard: done in %.1fs", time.monotonic() - start)
     return {
         "labels": result.labels,
         "centroids": result.centroids.tolist(),

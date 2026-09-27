@@ -1,0 +1,46 @@
+# Sentiment labeler pool parameters (see src/cybernaut_mini/sentiment/labelers.py).
+#
+# The default pool is the OFFLINE lexicon sweep: TextBlob polarity thresholds
+# {0.10..0.45} and VADER compound thresholds {0.10, 0.20, 0.30}, plus the
+# Random baseline. Flair, the two FinBERT checkpoints, and few-shot LLM
+# labelers are opt-in: flair needs `uv pip install flair`, FinBERT downloads
+# weights, and llm_models needs an OPENROUTER_API_KEY / OPENAI_API_KEY (or a
+# local OpenAI-compatible server such as Ollama at http://localhost:11434/v1).
+#
+# The few-shot prompt every LLM labeler runs under is configs/sentiment/
+# few_shot_prompt.txt — copied VERBATIM from the post's "LLM Prompt" section
+# and asserted byte-identical to labelers.FEW_SHOT_PROMPT by the tests.
+sentiment_labelers:
+  textblob_thresholds: [0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45]
+  vader_thresholds: [0.10, 0.20, 0.30]
+  flair_confidences: []          # opt-in: [0.70, 0.80, 0.90]
+  finbert_models: []             # opt-in: [ProsusAI/finbert, yiyanghkust/finbert-tone]
+  llm_models: []                 # opt-in: [{model: "qwen/qwen-2.5-7b-instruct", name: "Qwen2.5-7B"}]
+  random_seed: 42
+
+sentiment_benchmark:
+  reference: "VADER-0.10"        # proxy gold offline; a gold/LLM column when available
+  random_seed: 42
+  # Hypothetical cost extrapolation (USD per million tokens; illustrative only).
+  cost_models:
+    - name: "hosted-frontier"
+      prompt_tokens_per_story: 330
+      completion_tokens_per_story: 2
+      usd_per_million_prompt_tokens: 10.0
+      usd_per_million_completion_tokens: 30.0
+  n_stories: 10000000
+
+sentiment_ensemble:
+  gold_column: "gold"
+  exclude: ["Random"]
+  bootstrap_runs: 1000
+  bootstrap_subsample: 0.75
+  bootstrap_seed: 42
+
+sentiment_distil:
+  embedding:
+    provider: hash               # offline default; sentence_transformers opt-in
+    dim: 256
+  survey_checkpoints: []         # opt-in: the CPU-friendly slice in distil.DEFAULT_SURVEY_CHECKPOINTS
+  test_size: 0.25
+  random_state: 42

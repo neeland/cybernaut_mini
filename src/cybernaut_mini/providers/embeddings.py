@@ -172,6 +172,14 @@ class SentenceTransformersEmbedder:
     Constructing this downloads the weights on first use. The download is pinned to
     ``revision`` when one is given and authenticated with ``HF_TOKEN`` when present,
     so a private or gated model works without a separate login step.
+
+    E5 checkpoints come in two prefix schemes that must never mix (see
+    ``query/s4_instruct/e5.py``): the non-instruct checkpoints require
+    ``query:``/``passage:`` prefixes, applied here; the *instruct* checkpoints take
+    the ``Instruct: …\\nQuery: …`` wire format on the query side — composed by stage
+    4 in ``query/live.py``, not here — and **no** prefix on the document side. The
+    two halves share :func:`cybernaut_mini.query.live.is_e5_instruct`, so which
+    scheme a model gets cannot drift between build and query time.
     """
 
     def __init__(
@@ -209,7 +217,10 @@ class SentenceTransformersEmbedder:
             token=os.environ.get("HF_TOKEN") or None,
             device=self._device,
         )
-        self._is_e5 = "e5" in model_name.lower()
+        from cybernaut_mini.query.live import is_e5_instruct
+
+        self._is_e5_instruct = is_e5_instruct(model_name)
+        self._is_e5 = "e5" in model_name.lower() and not self._is_e5_instruct
 
     @property
     def device(self) -> str:

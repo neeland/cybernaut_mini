@@ -98,7 +98,9 @@ Alternatives rejected:
 from __future__ import annotations
 
 import json
+import logging
 import math
+import time
 import warnings
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping, Sequence
@@ -128,6 +130,8 @@ from cybernaut_mini.storage import JsonlStore, LruCache
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from rank_bm25 import BM25Okapi
+
+logger = logging.getLogger(__name__)
 
 FloatArray = npt.NDArray[np.float32]
 
@@ -179,6 +183,7 @@ _TOKENS_NAME = "tokens.jsonl"
 _EMBEDDINGS_NAME = "embeddings.npy"
 _ROW_MAP_NAME = "row_map.json"
 _META_NAME = "index_meta.json"
+_GLOBAL_IDF_NAME = "global_idf.json"
 _VALID_NAME = "_VALID"
 _SHARDS_DIR = "shards"
 _ARTIFACTS_DIR = "artifacts"
@@ -239,6 +244,48 @@ def compute_keywords(
         keywords.sort(key=lambda kw: (-kw.weight, kw.term))
         result[shard_id] = keywords[:max_keywords]
     return result
+
+
+def _idf_from_df(df: Mapping[str, int], n_documents: int) -> dict[str, float]:
+    """IDF table from document frequencies: ``log((1+N)/(1+df)) + 1``.
+
+    The same smoothed formula :func:`compute_keywords` uses over shards, applied
+    over documents, so one definition of "rare" runs through the whole build.
+    """
+    return {
+        term: math.log((1 + n_documents) / (1 + count)) + 1 for term, count in df.items()
+    }
+
+
+def _document_idf_terms(tokens: Iterable[str]) -> set[str]:
+    """The terms one document contributes to the corpus IDF table.
+
+    Each unique token counts once, and its singular form (stage 3's
+    :func:`~cybernaut_mini.query.s3_intents.singularize`) counts too, because the
+    consumer of this table — stage-3 intent prediction in ``routing.query_intents``
+    — looks terms up in singularized form while the build tokens are surface forms.
+    """
+    from cybernaut_mini.query.s3_intents import singularize
+
+    unique = set(tokens)
+    return unique | {singularize(term) for term in unique}
+
+
+def compute_global_idf(token_streams: Iterable[Iterable[str]]) -> dict[str, float]:
+    """Corpus-global term -> IDF table from per-document token streams.
+
+    This is the table stage 3 was designed to receive and never got: without it,
+    ``routing.query_intents`` scores intents against a uniform IDF of 1.0. Built at
+    index time (one streaming pass the writer is already making) and persisted as
+    the ``global_idf.json`` sidecar, it costs the query path a dictionary lookup.
+    """
+    df: Counter[str] = Counter()
+    n_documents = 0
+    for tokens in token_streams:
+        n_documents += 1
+        for term in _document_idf_terms(tokens):
+            df[term] += 1
+    return _idf_from_df(df, n_documents)
 
 
 def compute_term_graph(
@@ -355,7 +402,12 @@ def compute_shard_term_graphs(
     """
     priority = priority_terms or {}
     graphs: dict[int, dict[str, dict[str, float]]] = {}
-    for shard_id in sorted(shard_document_ids):
+    n_shards = len(shard_document_ids)
+    # ~10 progress lines regardless of shard count.
+    log_every = max(1, n_shards // 10)
+    start = time.monotonic()
+    logger.info("computing term graphs for %d shard(s) ...", n_shards)
+    for done, shard_id in enumerate(sorted(shard_document_ids), start=1):
         token_lists = [list(doc_tokens.get(doc_id, [])) for doc_id in shard_document_ids[shard_id]]
         graphs[shard_id] = compute_term_graph(
             token_lists,
@@ -365,6 +417,16 @@ def compute_shard_term_graphs(
             max_neighbours=max_neighbours,
             priority_terms=priority.get(shard_id, ()),
         )
+        if done % log_every == 0 and done < n_shards:
+            logger.info(
+                "term graphs: %d/%d shard(s), %.0fs elapsed",
+                done,
+                n_shards,
+                time.monotonic() - start,
+            )
+    logger.info(
+        "term graphs: done, %d shard(s) in %.1fs", n_shards, time.monotonic() - start
+    )
     return graphs
 
 
@@ -831,8 +893,11 @@ def write_index(
     (index_path / _VALID_NAME).unlink(missing_ok=True)
 
     # documents.jsonl and tokens.jsonl, written in one streaming pass so that
-    # `documents` need only be iterable and is never held as a list here.
+    # `documents` need only be iterable and is never held as a list here. The same
+    # pass accumulates per-term document frequencies for the corpus-global IDF
+    # sidecar, so the table costs no extra read of the corpus.
     row_map: dict[str, int] = {}
+    term_df: Counter[str] = Counter()
     documents_file = index_path / _DOCUMENTS_NAME
     tokens_file = index_path / _TOKENS_NAME
     with (
@@ -844,10 +909,11 @@ def write_index(
                 msg = f"duplicate document id in index write: {doc.id!r}"
                 raise ValueError(msg)
             row_map[doc.id] = row
+            tokens = list(doc_tokens.get(doc.id, []))
+            for term in _document_idf_terms(tokens):
+                term_df[term] += 1
             docs_fh.write(canonical_dumps(doc.model_dump(mode="json")) + "\n")
-            tokens_fh.write(
-                canonical_dumps({"id": doc.id, "tokens": list(doc_tokens.get(doc.id, []))}) + "\n"
-            )
+            tokens_fh.write(canonical_dumps({"id": doc.id, "tokens": tokens}) + "\n")
 
     # embeddings.npy
     np.save(index_path / _EMBEDDINGS_NAME, vectors.astype(np.float32))
@@ -856,6 +922,18 @@ def write_index(
     (index_path / _ROW_MAP_NAME).write_text(canonical_dumps(row_map) + "\n", encoding="utf-8")
     n_documents = len(row_map)
     del row_map
+
+    # global_idf.json — the corpus-global stem->IDF sidecar consumed by
+    # routing.query_intents (stage 3). Optional at read time so pre-existing
+    # indexes of the same artifact version still load; every new write has it.
+    (index_path / _GLOBAL_IDF_NAME).write_text(
+        canonical_dumps(
+            {"n_documents": n_documents, "idf": _idf_from_df(term_df, n_documents)}
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    del term_df
 
     # Offset sidecars. Building them here is what makes `load` O(1) in corpus size.
     doc_store = JsonlStore.build(documents_file)
@@ -1011,6 +1089,8 @@ class LoadedIndex:
         self.bm25 = Bm25Index(manifests, doc_tokens, maxsize=bm25_cache_size)
         self.artifacts = artifacts or ShardArtifactsIndex(n_shards=max(1, len(manifests)))
         self._stores: list[JsonlStore] = []
+        self._global_idf: dict[str, float] | None = None
+        self._global_idf_resolved = False
 
     # -------------------------------------------------------------- #
     # Shard artifacts                                                 #
@@ -1039,6 +1119,32 @@ class LoadedIndex:
                 "vocabulary": payload["vocabulary"],
             }
         )
+
+    @property
+    def global_idf(self) -> Mapping[str, float] | None:
+        """Corpus-global term -> IDF table, or ``None`` when the index has none.
+
+        Read lazily from the ``global_idf.json`` sidecar for a disk-backed index.
+        For an in-memory index built from plain dicts (fixtures), it is computed
+        once from ``doc_tokens``; a lazily stored token mapping without a sidecar
+        yields ``None`` rather than forcing a full corpus read on the query path.
+        """
+        if self._global_idf_resolved:
+            return self._global_idf
+        self._global_idf_resolved = True
+        if self.index_path is not None:
+            sidecar = Path(self.index_path) / _GLOBAL_IDF_NAME
+            if sidecar.exists():
+                try:
+                    payload = json.loads(sidecar.read_text(encoding="utf-8"))
+                    raw = payload.get("idf", {})
+                    self._global_idf = {str(k): float(v) for k, v in raw.items()}
+                except (ValueError, TypeError, OSError):
+                    logger.warning("unreadable %s sidecar; using uniform IDF", _GLOBAL_IDF_NAME)
+                    self._global_idf = None
+        elif isinstance(self.doc_tokens, dict):
+            self._global_idf = compute_global_idf(self.doc_tokens.values())
+        return self._global_idf
 
     def cache_stats(self) -> dict[str, dict[str, int]]:
         """Counters for every bounded cache, for tests and trace output."""

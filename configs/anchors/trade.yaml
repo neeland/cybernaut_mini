@@ -1,0 +1,40 @@
+# The Trade Policy Uncertainty anchor set: 3 topic sentences + the matched
+# uncertain/certain pair, verbatim from the TPU/EPU post ("The whole index is five
+# sentences").
+#
+# Source: https://nosible.com/blog/an-embedding-based-approach-to-trade-and-economic-policy-uncertainty
+#   Local copy: docs/blog-archive/an-embedding-based-approach-to-trade-and-economic-policy-uncertainty.md
+#
+# relevant(e) = max cosine(event e, the 3 topic phrases) >= 0.35 — relevance reads the
+# flat `anchors` block only; the pair supplies polarity. "The 0.35 cutoff is not
+# load-bearing. Moving it from 0.30 to 0.40 changes every correlation by about 0.02."
+name: trade
+source: https://nosible.com/blog/an-embedding-based-approach-to-trade-and-economic-policy-uncertainty
+thresholds:
+  relevance_floor: 0.35
+  polarity_temperature: 0.1
+anchors:
+  tariffs: >-
+    Import tariffs and duties: a government imposing, raising, threatening or suspending
+    tariffs, customs duties, import quotas, surcharges or fees on goods imported from
+    other countries
+  agreements: >-
+    Trade negotiations, trade agreements and trade treaties between countries: free
+    trade deals being negotiated, renegotiated, signed, ratified, suspended or
+    abandoned, and trade talks between governments
+  disputes: >-
+    Trade disputes, trade wars and protectionism: retaliatory tariffs, anti-dumping
+    measures, import barriers, export controls and restrictions, boycotts of foreign
+    goods, and trade complaints before the WTO
+levers:
+  trade:
+    - uncertain: >-
+        Trade policy uncertainty: the outlook for tariffs, trade agreements and trade
+        rules is uncertain, unclear and unpredictable; threatened tariffs may or may
+        not happen, trade negotiations are stalled or at risk of collapse, and
+        businesses cannot plan for what trade policy comes next
+      certain: >-
+        Trade policy certainty and stability: a trade agreement is concluded and
+        ratified, a trade dispute is resolved, tariffs are removed or finalized, and
+        governments give businesses a clear, settled and predictable trade policy
+        outlook

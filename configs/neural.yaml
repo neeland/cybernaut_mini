@@ -1,0 +1,37 @@
+# Full neural profile: real Hugging Face models at every decision point, on the
+# GPU (MPS on Apple silicon) where one exists.
+#
+#     uv sync --extra st --extra mps    # Mac; drop --extra mps elsewhere
+#     cybernaut-mini search --index ... --mode agent --config configs/neural.yaml "..."
+#
+# The agent's judge becomes a multilingual cross-encoder scoring every
+# (question, document) pair, the query generator becomes a small instruct LLM
+# rewriting queries from the search state, and llm_calls in the trace counts
+# their invocations. Weights download on first use; pin *_revision fields for
+# reproducible runs. Falls back to CPU automatically off Apple silicon.
+seed: 42
+embedding:
+  provider: sentence_transformers
+  model: intfloat/multilingual-e5-small
+  device: auto
+index:
+  n_shards: 12
+  max_keywords: 30
+  max_entities: 30
+  cooccurrence_window: 5
+  min_edge_count: 2
+rrf:
+  k: 60
+  dense_weight: 1.0
+  lexical_weight: 1.0
+  entity_weight: 0.5
+agent:
+  exploration_constant: 1.2
+  max_expansions: 5
+  max_retrieval_calls: 18
+  judge: cross_encoder
+  judge_model: cross-encoder/mmarco-mMiniLMv2-L12-H384-v1
+  query_generator: llm
+  generator_model: Qwen/Qwen2.5-0.5B-Instruct
+  generator_max_new_tokens: 192
+  device: auto

@@ -1,0 +1,20 @@
+# The single trade-coercion patch phrase, verbatim from the GPR post ("Closing the
+# trade-war gap").
+#
+# Source: https://nosible.com/blog/rebuilding-the-geopolitical-risk-index-from-nosible-world
+#   Local copy: docs/blog-archive/rebuilding-the-geopolitical-risk-index-from-nosible-world.md
+#
+# trade(e) = cosine similarity between event e's embedding and this anchor phrase, and
+# an event enters the index if geopolitical(e) OR trade(e) >= 0.40. The OR-gate lives
+# in cybernaut_mini.world.indices.gpr.trade_patched_mask; conflict-country series must
+# be bit-identical before and after the patch.
+name: trade_coercion
+source: https://nosible.com/blog/rebuilding-the-geopolitical-risk-index-from-nosible-world
+thresholds:
+  relevance_floor: 0.40
+anchors:
+  trade_coercion: >-
+    Tariffs, trade wars and economic coercion between countries: a government imposing
+    import tariffs, retaliatory duties, export controls or other trade restrictions on
+    another country, and the diplomatic tensions and threats of retaliation these
+    trigger

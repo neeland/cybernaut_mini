@@ -38,13 +38,16 @@ Assumptions:
     - [inferred] stage 6 reranks the whole stage-5 selection (``candidate_depth``
       shards, 100 by default), and ``top_n`` truncates afterwards. Reranking only the
       shards you were going to keep anyway cannot change which shards you keep.
-    - [inferred] the search intents stage 6 probes the bloom filters with are derived
+    - [updated] the search intents stage 6 probes the bloom filters with are derived
       here from the question with :func:`~cybernaut_mini.query.s3_intents.predict_intents`
-      over a *uniform* IDF table, because a :class:`~cybernaut_mini.indexing.LoadedIndex`
-      carries no global IDF statistic and building one would mean reading every shard.
-      Uniform IDF still ranks intents by term frequency and phrase length, and a caller
-      that has a real table passes ``idf_lookup=``. Pass ``intents=`` to supply stage 3's
-      own output.
+      over the index's corpus-global IDF sidecar (``global_idf.json``), which the build
+      now writes in the same streaming pass as ``tokens.jsonl``. An index without the
+      sidecar falls back to the old uniform table — still ranked by term frequency and
+      phrase length — and a caller with its own table passes ``idf_lookup=``. Pass
+      ``intents=`` to supply stage 3's own output.
+    - [inferred] ``route`` runs stage 1 (:func:`~cybernaut_mini.query.live.prepare`)
+      before selecting, so a translated question routes on its translation. With no
+      translator configured this is the identity plus a language detection.
     - [inferred] the stage-5 structures (HNSW graph, keyword matrix, entity matrix) are
       built once per ``(index, embedding model)`` and cached in a
       :class:`weakref.WeakKeyDictionary`, because the agent calls ``route`` up to 18
@@ -84,6 +87,8 @@ if TYPE_CHECKING:
     from cybernaut_mini.config import RRFConfig
     from cybernaut_mini.indexing import LoadedIndex
     from cybernaut_mini.providers.embeddings import EmbeddingProvider
+    from cybernaut_mini.query.s1_language import PreparedQuestion
+    from cybernaut_mini.query.s1_language.translate import Translator
     from cybernaut_mini.query.s6_rerank import ShardReranker
     from cybernaut_mini.text import TextProcessor
 
@@ -212,10 +217,12 @@ def query_intents(
 
     ``idf_lookup`` defaults to an empty mapping, which
     :func:`~cybernaut_mini.query.s3_intents.resolve_idf` turns into a uniform IDF of
-    1.0. That is a real approximation and it is deliberate: an index carries no global
-    IDF table, and deriving one would mean reading every shard on every query. With
-    uniform IDF the intents are still the question's highest-scoring contiguous runs of
-    content words, which is what the bloom filter is probed with.
+    1.0. :func:`route` no longer settles for that when it can help it: it passes the
+    index's corpus-global ``global_idf.json`` sidecar (written by the build) so the
+    intents rank by real rarity, and only an index without the sidecar falls back to
+    the uniform table. With uniform IDF the intents are still the question's
+    highest-scoring contiguous runs of content words, which is what the bloom filter
+    is probed with.
     """
     return tuple(predict_intents(question, {} if idf_lookup is None else idf_lookup, top_k=top_k))
 
@@ -235,6 +242,9 @@ def route(
     selector: ShardSelector | None = None,
     rerankers: Sequence[ShardReranker] | None = None,
     rerank_weights: Mapping[str, float] | None = None,
+    target_lang: str | None = None,
+    translator: Translator | None = None,
+    prepared: PreparedQuestion | None = None,
 ) -> tuple[list[int], RoutingSignals]:
     """Select shards (stage 5), rerank them (stage 6), return the ids best-first.
 
@@ -271,12 +281,22 @@ def route(
     rerankers, rerank_weights:
         Stage-6 overrides, e.g. appending
         :func:`~cybernaut_mini.query.s6_rerank.create_neural_reranker`.
+    target_lang, translator, prepared:
+        Stage-1 wiring: the question is prepared (detected, optionally translated)
+        before selection, and the prepared text is what stages 5-6 see. Passing
+        ``prepared`` skips the (deterministic) re-detection.
 
     Returns
     -------
     tuple[list[int], RoutingSignals]
         Shard ids ordered best-first, plus the full signal trace.
     """
+    from cybernaut_mini.query.live import prepare
+
+    if prepared is None:
+        prepared = prepare(question, target_lang=target_lang, translator=translator)
+    text = prepared.text_for_retrieval or question
+
     active = selector or shard_selector(
         index,
         provider=provider,
@@ -284,14 +304,15 @@ def route(
         rrf_config=rrf_config,
         candidate_depth=candidate_depth,
     )
-    selection = active.select(question, candidate_depth=candidate_depth)
+    selection = active.select(text, candidate_depth=candidate_depth)
 
     dense_factor = selection.signals.factor(DENSE)
     sparse_factor = selection.signals.factor(SPARSE)
     entity_factor = selection.signals.factor(ENTITY)
 
+    effective_idf = idf_lookup if idf_lookup is not None else index.global_idf
     resolved_intents = (
-        query_intents(question, idf_lookup=idf_lookup) if intents is None else tuple(intents)
+        query_intents(text, idf_lookup=effective_idf) if intents is None else tuple(intents)
     )
 
     rerank_result: RerankResult | None = None
@@ -301,7 +322,7 @@ def route(
     if rerank and result_ids:
         rerank_result = rerank_index_shards(
             index,
-            question,
+            text,
             selected=result_ids,
             intents=resolved_intents,
             rerankers=rerankers,

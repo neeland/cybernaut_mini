@@ -1,0 +1,112 @@
+# IPTC-Media-Topics-ish ontology subset for single-label event classification.
+#
+# Source: the GPR post's exact geopolitical filter reads three ontology fields —
+#   https://nosible.com/blog/rebuilding-the-geopolitical-risk-index-from-nosible-world
+#   ("Its top level has buckets such as `conflict, war and peace`, `economy,
+#   business and finance`, and `health` ... We match the ontology codes exactly,
+#   never the words in the labels, so 'weather warning' or 'tug-of-war' never leak
+#   in."). Local copy:
+#   docs/blog-archive/rebuilding-the-geopolitical-risk-index-from-nosible-world.md
+#
+# The level-1 labels are the 17 top-level IPTC Media Topics. Descriptions are this
+# repo's own one-sentence glosses (the embedding-nearest-topic classifier embeds
+# them with the same frozen model as the events); level-2/3 rows exist for the
+# codes the geopolitical filter needs. The topic labels are the exact strings the
+# filter compares against.
+topics:
+  - level_1: "arts, culture, entertainment and media"
+    description: >-
+      Arts, culture, entertainment and media: film, music, television, books,
+      celebrities, museums and the media business.
+  - level_1: "crime, law and justice"
+    description: >-
+      Crime, law and justice: crimes, police investigations, arrests, courts,
+      trials, verdicts, prisons and law enforcement.
+  - level_1: "crime, law and justice"
+    level_2: "crime"
+    level_3: "war crime"
+    description: >-
+      War crimes: atrocities committed during armed conflict, prosecutions before
+      international tribunals and courts.
+  - level_1: "crime, law and justice"
+    level_2: "crime"
+    level_3: "genocide"
+    description: >-
+      Genocide: the deliberate destruction of a national, ethnic, racial or
+      religious group, and its prosecution.
+  - level_1: "disaster, accident and emergency incident"
+    description: >-
+      Disasters, accidents and emergency incidents: earthquakes, floods, storms,
+      fires, crashes, explosions and rescue operations.
+  - level_1: "economy, business and finance"
+    description: >-
+      Economy, business and finance: companies, markets, earnings, trade,
+      commerce, banking, prices and economic indicators.
+  - level_1: "education"
+    description: >-
+      Education: schools, universities, students, teachers, curricula and
+      education policy.
+  - level_1: "environment"
+    description: >-
+      Environment: climate change, pollution, conservation, wildlife, energy
+      transition and natural resources.
+  - level_1: "health"
+    description: >-
+      Health: diseases, treatments, hospitals, public health, medicines, vaccines
+      and healthcare systems.
+  - level_1: "human interest"
+    description: >-
+      Human interest: curiosities, ceremonies, anniversaries, animals, records and
+      everyday remarkable stories.
+  - level_1: "labour"
+    description: >-
+      Labour: employment, jobs, wages, strikes, unions, layoffs and workplace
+      conditions.
+  - level_1: "lifestyle and leisure"
+    description: >-
+      Lifestyle and leisure: travel, tourism, food, fashion, hobbies, games and
+      recreation.
+  - level_1: "politics"
+    description: >-
+      Politics: government, elections, parties, legislation, public policy and
+      political processes within a country.
+  - level_1: "politics"
+    level_2: "international relations"
+    description: >-
+      International relations: diplomacy, foreign policy, summits, treaties,
+      alliances, sanctions and relations between states.
+  - level_1: "politics"
+    level_2: "government policy"
+    level_3: "nuclear policy"
+    description: >-
+      Nuclear policy: nuclear weapons programs, non-proliferation, arms control
+      negotiations and nuclear agreements.
+  - level_1: "religion"
+    description: >-
+      Religion: faiths, churches, religious leaders, observances and belief.
+  - level_1: "science and technology"
+    description: >-
+      Science and technology: research, discoveries, space, computing, artificial
+      intelligence and engineering.
+  - level_1: "society"
+    description: >-
+      Society: demographics, social issues, family, welfare, discrimination and
+      community life.
+  - level_1: "sport"
+    description: >-
+      Sport: matches, tournaments, teams, athletes, scores and sporting events
+      such as football, cricket and the Olympics.
+  - level_1: "conflict, war and peace"
+    description: >-
+      Conflict, war and peace: armed conflict, war, military operations, coups,
+      civil unrest, insurgency and peace processes.
+  - level_1: "conflict, war and peace"
+    level_2: "act of terror"
+    level_3: "terrorism"
+    description: >-
+      Terrorism: terrorist attacks, bombings, plots, counter-terrorism operations
+      and their aftermath.
+  - level_1: "weather"
+    description: >-
+      Weather: forecasts, warnings, temperatures, storms and meteorological
+      conditions.

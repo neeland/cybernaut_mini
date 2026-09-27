@@ -1,0 +1,20 @@
+# Trade-policy episodes inside the laptop corpus window (CC-News 2016-2019),
+# for the episode rank-alignment table in cybernaut_mini.world.validate.
+#
+# Source: the episode table in
+#   https://nosible.com/blog/an-embedding-based-approach-to-trade-and-economic-policy-uncertainty
+#   ("Section 232 steel and aluminium | 2018-03", "China Section 301, round one |
+#   2018-06", "August 2019 escalation | 2019-08" are that table's in-window rows,
+#   verbatim). The 2018-12 Buenos Aires truce and 2019-05 escalation are the same
+#   trade war's other named rounds, dated by their public announcement months.
+#   Local copy: docs/blog-archive/an-embedding-based-approach-to-trade-and-economic-policy-uncertainty.md
+#
+# The published rule: every flagged episode lands above the 60th percentile of the
+# monthly index. Thresholds in tests are laptop-softened (the fixture corpus is a
+# 460-document slice), but the rule's shape is the published one.
+episodes:
+  section_232_steel_and_aluminium: "2018-03"
+  china_section_301_round_one: "2018-06"
+  buenos_aires_truce: "2018-12"
+  may_2019_escalation: "2019-05"
+  august_2019_escalation: "2019-08"

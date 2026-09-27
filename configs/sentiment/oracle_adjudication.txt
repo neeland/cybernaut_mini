@@ -1,0 +1,19 @@
+
+# TASK DESCRIPTION
+
+Given the following LLM prompt, another model labelled this text as "{prediction}".
+Is this model correct? Provide the correct label and a rationale for your answer.
+
+# RESPONSE FORMAT
+
+You must respond using this exact format. DO NOT RESPOND IN ANY OTHER WAY:
+
+```json
+{{
+    "correct": "true" | "false",
+    "label": {label_options},
+    "reason": "A rationale for the correctness or incorrectness of your label."
+}}
+```
+
+P.S. Think fast there is no time to waste.

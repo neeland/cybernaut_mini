@@ -1,0 +1,70 @@
+
+# TASK DESCRIPTION
+
+Read the following text snippet carefully and classify its **causal structure** as either
+**predictive** or **not-predictive**. You must also provide a short rationale for
+why you assigned the label you did.
+
+For clarity, here are the definitions:
+
+    1. Predictive: makes a concrete claim, forecast, prediction or estimate about a specific event.
+
+    2. Not Predictive: only reports or explains past or present facts. It does not contain ANY
+       predictions, estimates, or forecasts. Plans, schedules, hopes, retrospectives or non-concreate
+       predictions or estimates means it is **not-predictive**.
+
+# TASK GUIDELINES
+
+For the avoidance of doubt, follow this decision tree exactly. Don’t deviate.
+
+START
+ │
+ ├── Step 1: Carefully read and understand the snippet.
+ │
+ ├── Step 2: Check for causal structure indicators:
+ │
+ ├── Is the snippet clearly PREDICTIVE?
+ │     (contains explicit forecasts or predictions about the future or
+ │      numerical estimates about current or future events.)
+ │    │
+ │    ├── YES → Classify as "predictive"
+ │    │      └── Provide a rationale summarizing WHAT future outcome or effect is being
+ │    │          forecast or expected.
+ │    │
+ │    └── NO → Continue below
+ │
+ └── If it is not clearly predictive → Classify as "not-predictive"
+        └── Provide a rationale summarizing WHY it is 'not-predictive'.
+
+# DISAMBIGUATION RULES.
+
+1. Predictive
+    - If a snippet contains ANY predictive text, label it **"predictive"**.
+    - Numerical estimates about CURRENT or FUTURE statistics are to be considered **predictive**.
+    - Analyst estimates and ratings are **predictive** even if stated in the past tense.
+
+2. Not predictive
+    - Forward-looking plans or hopes without a claimed outcome remain **"not-predictive"**.
+    - Schedules / announcements of events are not a forecast about an uncertain outcome or effect so **not-predictive**.
+    - Retrospective narratives about past events should be classified as **not-predictive**.
+    - Potential future actions without concrete predictions are **not-predictive**.
+    - Future intent without a concrete prediction is **not-predictive**.
+
+# RESPONSE FORMAT
+
+You must respond with ONLY a valid JSON object formatted as follows. DO NOT WRITE ANY PREAMBLE JUST RETURN JSON.
+
+{{
+    "rationale": "A one-sentence rationale for your classification",
+    "causal": "predictive | not-predictive"
+}}
+
+SNIPPET TO LABEL
+
+Here is the snippet we would like you to label:
+
+{text}
+
+P.S. REMEMBER TO READ THE SNIPPET CAREFULLY AND FOLLOW THE GUIDELINES TO ARRIVE AT THE MOST APPROPRIATE
+CAUSAL CLASSIFICATION. WHEN IN DOUBT, YOU SHOULD DEFER TO A "not-predictive" CLASSIFICATION FOR THE SNIPPET.
+GOOD LUCK!

@@ -1,0 +1,70 @@
+
+# TASK DESCRIPTION
+
+You will be given a text snippet. Your task is to determine the **temporal
+orientation** of the main event or topic in the text, classifying it as either
+"forward" (forward-looking) or "not-forward" (backward-looking or neutral).
+
+# GUIDELINES
+
+For the avoidance of doubt here is a decision tree that you can follow to arrive
+at the most appropriate temporal orientation classification for the snippet. Pay
+careful attention to the logic. Don't deviate.
+
+START
+│
+├── Step 1: Carefully read and identify the MAIN event or topic in the text.
+│           (Ignore supporting details, commentary, or verb tenses of reporting)
+│
+├── Step 2: Determine the temporal orientation of this main event/topic:
+│
+├── Is the main event/topic FORWARD LOOKING?
+│     (Will the event occur in the future or is it planned/expected?)
+│     Examples: future launches, upcoming announcements, expansion plans, projections,
+│              forecasts, guidance, targets, goals, roadmaps
+│     Note: News about future plans (even if reported in past/present tense) = forward
+│    │
+│    ├── YES → Classify as "forward"
+│    │      └── Provide a rationale explaining what future event the text focuses on.
+│    │
+│    └── NO → Classify as "not-forward"
+│           └── This includes:
+│               • Past events (announcements made yesterday, completed mergers, reported earnings)
+│               • Current states (ongoing situations, present trading activity, existing conditions)
+│               • Timeless facts or general statements
+│               └── Provide a rationale explaining why the event is not forward-looking.
+│
+END
+
+IMPORTANT: When uncertain about temporal orientation → Default to "not-forward"
+
+# DISAMBIGUATION RULES
+
+When the temporal orientation is unclear, apply these rules:
+
+1. **Reporting Verb vs. Main Event Rule**
+   - Ignore the tense of reporting verbs (said, announced, reported)
+   - Focus on what is being reported about
+   - Example: "CEO said yesterday the company will expand" → "forward" (expansion is future)
+
+2. **Plans and Intentions Rule**
+   - Any plans, intentions, targets, or forward guidance = "forward" (even if approved/decided in past)
+   - Example: "Board approved new product launch" → "forward" (launch is future event)
+
+3. **When in Doubt → Not-Forward**
+   - If temporal orientation remains ambiguous → classify as "not-forward"
+
+# TEXT SNIPPET TO LABEL
+{text}
+
+# RESPONSE FORMAT
+
+You must respond with ONLY a valid JSON object formatted as follows. DO NOT WRITE ANY PREAMBLE JUST RETURN JSON.
+
+{{
+    "tense": "forward | not-forward",
+    "rationale": "A one-sentence rationale for your classification"
+}}
+
+P.S. REMEMBER TO READ THE SNIPPET CAREFULLY AND FOLLOW THE GUIDELINES TO ARRIVE AT THE MOST APPROPRIATE
+CLASSIFICATION. WHEN IN DOUBT, YOU SHOULD DEFER TO A "not-forward" CLASSIFICATION FOR THE SNIPPET. GOOD LUCK!

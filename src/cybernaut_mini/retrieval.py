@@ -27,6 +27,13 @@ pass for the question's stage-3 search intents, and the intent evidence is fused
 the ranking. It is bounded — only ``2 * top_k`` documents are read — and it is a no-op
 when nothing matches.
 
+It also gained the head of the pipeline. ``retrieve`` now runs stage 1
+(:func:`~cybernaut_mini.query.live.prepare`) before anything else, tokenizes through
+:func:`~cybernaut_mini.query.live.live_query_tokens` so non-Latin questions stop
+being deleted by the ``[a-z0-9]+`` regex, embeds E5-instruct checkpoints through
+stage 4's wire format, and derives its stage-3 intents against the index's
+corpus-global IDF sidecar instead of a uniform table.
+
 Blog ref: https://nosible.com/blog/the-road-to-cybernaut-1 — stage 8, "Retrieval Using
     Map-Reduce": the broadcast package, the five per-shard steps, the reduce that groups
     by document identifier, and the user-bounded snippet. Local copy:
@@ -68,6 +75,8 @@ if TYPE_CHECKING:
     from cybernaut_mini.config import RRFConfig
     from cybernaut_mini.indexing import LoadedIndex
     from cybernaut_mini.models import IndexMeta, MetadataFilter, SearchHit
+    from cybernaut_mini.query.s1_language import PreparedQuestion
+    from cybernaut_mini.query.s1_language.translate import Translator
     from cybernaut_mini.query.s3_intents import SearchIntent
     from cybernaut_mini.text import TextProcessor
 
@@ -226,6 +235,10 @@ def retrieve(
     fusion: Literal["global", "per_shard"] = "global",
     refine_top_n: int | None = None,
     max_snippet_chars: int = 500,
+    target_lang: str | None = None,
+    translator: Translator | None = None,
+    prepared: PreparedQuestion | None = None,
+    embedding_text: str | None = None,
 ) -> list[SearchHit]:
     """End-to-end retrieval over a :class:`~cybernaut_mini.indexing.LoadedIndex`.
 
@@ -257,10 +270,21 @@ def retrieve(
         ``2 * top_k``; ``0`` disables the pass.
     ``max_snippet_chars``
         The post's user-chosen snippet maximum, 1..500.
+    ``target_lang`` / ``translator`` / ``prepared``
+        Stage-1 wiring. Every call runs :func:`~cybernaut_mini.query.live.prepare`
+        (identity when no translator is configured) unless the caller passes its own
+        ``prepared`` result; the prepared ``text_for_retrieval`` is what gets
+        tokenized, embedded and scanned.
+    ``embedding_text``
+        Override for the exact string handed to ``provider.embed_queries`` — the
+        seam stage 4's instruction evolution scores through. Defaults to the
+        stage-4 composition for E5-instruct providers and the prepared text
+        otherwise.
     """
     # Imported here, not at module scope: stage 8's map step imports
     # `score_shard_components` from this module, so a top-level import would close a
     # cycle. See the module docstring.
+    from cybernaut_mini.query.live import embedding_query_text, live_query_tokens, prepare
     from cybernaut_mini.query.s8_retrieve import (
         DEFAULT_PER_SHARD_LIMIT,
         BroadcastRequest,
@@ -270,9 +294,13 @@ def retrieve(
     if top_k < 1 or (per_shard_limit is not None and per_shard_limit < 1):
         return []
 
-    query_tokens = processor.content_tokens(question)
-    if not query_tokens:
-        query_tokens = processor.tokenize(question)
+    if prepared is None:
+        prepared = prepare(question, target_lang=target_lang, translator=translator)
+    text = prepared.text_for_retrieval or question
+
+    query_tokens = live_query_tokens(
+        text, language=prepared.retrieval_language, processor=processor
+    )
     expansion_tokens: list[str] = list(expansions or [])
 
     effective_mode = mode
@@ -286,7 +314,17 @@ def retrieve(
 
     query_vector: FloatArray | None = None
     if effective_mode != "lexical":
-        query_vector = provider.embed_queries([question])[0]
+        embed_source = (
+            embedding_text
+            if embedding_text is not None
+            else embedding_query_text(
+                provider.identifier,
+                text,
+                language=prepared.retrieval_language,
+                expansions=expansion_tokens,
+            )
+        )
+        query_vector = provider.embed_queries([embed_source])[0]
 
     target_shard_ids = sorted(shard_ids if shard_ids is not None else index.manifests.keys())
 
@@ -294,7 +332,7 @@ def retrieve(
         query_tokens=tuple(query_tokens),
         expansion_tokens=tuple(expansion_tokens),
         query_vector=query_vector,
-        intents=_resolve_intents(question, intents),
+        intents=_resolve_intents(index, text, intents),
         shard_ids=tuple(target_shard_ids),
         metadata_filter=metadata_filter,
         mode=effective_mode,
@@ -317,15 +355,19 @@ def retrieve(
 
 
 def _resolve_intents(
-    question: str, intents: Sequence[SearchIntent | str] | None
+    index: LoadedIndex, question: str, intents: Sequence[SearchIntent | str] | None
 ) -> tuple[SearchIntent, ...]:
-    """Stage-3 intents for the scan: the caller's, or derived from the question."""
+    """Stage-3 intents for the scan: the caller's, or derived from the question.
+
+    Derivation uses the index's corpus-global IDF sidecar when it exists, so the
+    intents rank by real rarity; a sidecar-less index falls back to uniform IDF.
+    """
     from cybernaut_mini.query.s3_intents import SearchIntent as _SearchIntent
 
     if intents is None:
         from cybernaut_mini.routing import query_intents
 
-        return query_intents(question)
+        return query_intents(question, idf_lookup=index.global_idf)
     return tuple(
         intent
         if isinstance(intent, _SearchIntent)

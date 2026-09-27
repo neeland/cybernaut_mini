@@ -1,0 +1,58 @@
+# The 17 market-stress anchors, verbatim from the risk-on/risk-off post.
+#
+# Source: https://nosible.com/blog/turning-news-into-a-risk-on-risk-off-equity-signal
+#   ("We define market stress as 17 short concepts ... The 17 anchors, verbatim").
+#   Local copy: docs/blog-archive/turning-news-into-a-risk-on-risk-off-equity-signal.md
+#
+# The phrases are entity- and time-agnostic (no specific countries, crises, or dates)
+# so no hindsight enters a backtest. The relevance floor 0.30 is the post's published
+# constant; it was tuned against text-embedding-3-large cosines, so open-model users
+# should sweep it (see cybernaut_mini.world.anchors.sweep_relevance_floor).
+name: stress
+source: https://nosible.com/blog/turning-news-into-a-risk-on-risk-off-equity-signal
+thresholds:
+  relevance_floor: 0.30
+anchors:
+  credit_spreads: >-
+    Widening corporate credit spreads, surging default risk and stress in corporate
+    bond markets
+  liquidity: >-
+    A liquidity crisis or funding stress freezing financial markets
+  deleveraging: >-
+    Forced selling, margin calls, deleveraging and liquidations cascading through markets
+  recession: >-
+    Rising fears of recession, sharp economic slowdown or collapsing growth
+  banking_credit: >-
+    A banking crisis, credit crunch, defaults or financial-system instability
+  volatility_fear: >-
+    A surge in financial market volatility, fear, panic and investor anxiety
+  equity_selloff: >-
+    A sharp sell-off, crash or plunge in global stock markets
+  flight_to_safety: >-
+    A flight to safety and risk-off panic: investors dumping risky assets for government
+    bonds, gold and reserve currencies
+  sovereign_fx: >-
+    A sovereign-debt default or currency crisis destabilising markets
+  monetary_shock: >-
+    An unexpected hawkish central bank or interest-rate shock tightening financial
+    conditions
+  rates_turmoil: >-
+    Turmoil in government bond markets: a bond rout, spiking yields and surging
+    interest-rate volatility
+  tail_hedging: >-
+    Investors rushing to buy downside protection and hedge against a market crash;
+    spiking demand for portfolio insurance
+  earnings_distress: >-
+    A wave of corporate profit warnings, earnings misses, bankruptcies and corporate
+    distress
+  employment_shock: >-
+    A labour-market shock: surging unemployment, mass layoffs or a sharply weakening
+    jobs report
+  tariffs: >-
+    New import tariffs, escalating protectionism and a trade war between major economies
+  natural_disaster: >-
+    A major natural disaster, extreme-weather catastrophe or critical-infrastructure
+    failure disrupting the economy
+  war_conflict: >-
+    The outbreak or escalation of war, military conflict or a major geopolitical
+    security crisis

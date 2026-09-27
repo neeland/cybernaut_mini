@@ -56,11 +56,14 @@ def test_reward_matches_weighted_formula() -> None:
     ]
     judge = JudgeScore(relevance=1.0, coverage=1.0, redundancy=1.0, reason="x")
     reward, components = compute_reward(judge, hits)
-    # dense/lexical normalized means over [1,0]/[2,0] = 0.5 each.
-    expected = 0.45 * 1.0 + 0.20 * 1.0 + 0.20 * 0.5 + 0.10 * 0.5 - 0.05 * 1.0
+    # dense/lexical normalized means over [1,0]/[2,0] = 0.5 each; fully
+    # redundant results contribute zero diversity.
+    expected = 0.45 * 1.0 + 0.20 * 1.0 + 0.20 * 0.5 + 0.10 * 0.5 + 0.05 * 0.0
     assert reward == pytest.approx(expected)
     assert components["dense"] == pytest.approx(0.5)
     assert components["lexical"] == pytest.approx(0.5)
+    assert components["diversity"] == pytest.approx(0.0)
+    assert components["redundancy"] == pytest.approx(1.0)
 
 
 def test_reward_is_clamped_to_unit_interval() -> None:
@@ -68,8 +71,8 @@ def test_reward_is_clamped_to_unit_interval() -> None:
     judge = JudgeScore(relevance=1.0, coverage=1.0, redundancy=0.0, reason="x")
     reward, _ = compute_reward(judge, hits)
     assert 0.0 <= reward <= 1.0
-    # Max achievable is 0.95 by design (single constant hit -> normalized mean 1.0).
-    assert reward == pytest.approx(0.95)
+    # Weights sum to 1.0: a perfect, non-redundant result set scores exactly 1.0.
+    assert reward == pytest.approx(1.0)
 
 
 # ------------------------------ node --------------------------------- #

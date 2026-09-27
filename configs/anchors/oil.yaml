@@ -1,0 +1,23 @@
+# The three oil-supply-risk anchor phrases, verbatim from the GPR post ("Risk to
+# oil supply").
+#
+# Source: https://nosible.com/blog/rebuilding-the-geopolitical-risk-index-from-nosible-world
+#   Local copy: docs/blog-archive/rebuilding-the-geopolitical-risk-index-from-nosible-world.md
+#
+# relevance(e) = highest cosine similarity between event e's embedding and these three
+# oil-supply-risk anchor phrases. Oil-GPR keeps the events that are both geopolitical
+# AND have relevance(e) >= 0.30, weights each by relevance x breadth, and divides by
+# B(m) — the AND-gate lives in cybernaut_mini.world.indices.gpr.oil_gpr.
+name: oil
+source: https://nosible.com/blog/rebuilding-the-geopolitical-risk-index-from-nosible-world
+thresholds:
+  relevance_floor: 0.30
+anchors:
+  conflict_regions: >-
+    Armed conflict and war in or around major oil-producing regions
+  crude_supply: >-
+    Crude oil supply: OPEC production quotas, output levels and disruptions to oil
+    production or exports
+  exporter_sanctions: >-
+    Sanctions, embargoes and export restrictions on major oil-exporting countries such
+    as Iran, Russia and Venezuela

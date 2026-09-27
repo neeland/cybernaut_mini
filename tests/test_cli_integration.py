@@ -18,6 +18,23 @@ from cybernaut_mini.cli import app
 
 runner = CliRunner()
 
+
+def _json_payload(result: Any) -> dict[str, Any]:
+    """Parse the JSON line from a --json command's stdout.
+
+    The first ``build`` in the process installs Kedro's rich logging on stdout,
+    so later commands' captured stdout may interleave log lines with the JSON.
+    The JSON is echoed as a single unwrapped line; log lines never start with
+    ``{``, so the last such line is the payload.
+    """
+    json_line = next(
+        (line for line in reversed(result.stdout.splitlines()) if line.strip().startswith("{")),
+        None,
+    )
+    assert json_line is not None, f"No JSON line in stdout: {result.stdout!r}"
+    payload: dict[str, Any] = json.loads(json_line)
+    return payload
+
 # ------------------------------------------------------------------ #
 # Corpus / config helpers                                             #
 # ------------------------------------------------------------------ #
@@ -189,13 +206,7 @@ def test_build_json_output(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code == 0
-    # Kedro logs also go to stdout; find the last line starting with '{'.
-    json_line = next(
-        (line for line in reversed(result.output.splitlines()) if line.strip().startswith("{")),
-        None,
-    )
-    assert json_line is not None, f"No JSON line in output: {result.output!r}"
-    data = json.loads(json_line)
+    data = _json_payload(result)
     assert data["n_documents"] == 24
     assert data["n_shards"] == 4
 
@@ -219,7 +230,7 @@ def test_inspect_shards_json(integration_index: dict[str, Path]) -> None:
         ["inspect-shards", "--index", str(integration_index["index"]), "--json"],
     )
     assert result.exit_code == 0
-    data = json.loads(result.output.strip())
+    data = _json_payload(result)
     assert "shards" in data
     assert len(data["shards"]) == 4
 
@@ -293,7 +304,7 @@ def test_search_json_mode(integration_index: dict[str, Path]) -> None:
         ],
     )
     assert result.exit_code == 0
-    data = json.loads(result.output.strip())
+    data = _json_payload(result)
     assert "hits" in data
     assert "question" in data
 
@@ -333,7 +344,7 @@ def test_eval_json_output(integration_index: dict[str, Path]) -> None:
         ],
     )
     assert result.exit_code == 0, f"eval --json failed:\n{result.output}"
-    data = json.loads(result.output.strip())
+    data = _json_payload(result)
     assert "metrics" in data
     assert len(data["metrics"]) == 4
     for m in data["metrics"]:

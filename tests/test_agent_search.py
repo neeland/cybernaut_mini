@@ -104,9 +104,106 @@ def test_trace_records_reward_and_routing_signals(built_index: LoadedIndex) -> N
         "coverage",
         "dense",
         "lexical",
+        "diversity",
         "redundancy",
     }
     assert node.routing is not None
     assert "dense" in node.routing and "fused" in node.routing
     # Regex processor extracts no entities -> entity ranker omitted, not zero-filled.
     assert node.routing["entity"] is None
+
+
+# ---------------- agent completion: knobs, annealing, accounting ---------------- #
+
+
+def test_trace_emits_hybrid_weight_and_reranker_actions(built_index: LoadedIndex) -> None:
+    """The refine stage tries the {0.5, 1.0, 1.5} lexical grid and a rerank-off
+    branch, so AdjustHybridWeights/ToggleRerankers are real actions in the trace,
+    not dead classes."""
+    result, _ = run(built_index)
+    actions = [node.action for node in result.trace.nodes if node.action]
+    types = {action["type"] for action in actions}
+    assert "AdjustHybridWeights" in types
+    assert "ToggleRerankers" in types
+    weight_nodes = [
+        node
+        for node in result.trace.nodes
+        if node.action and node.action["type"] == "AdjustHybridWeights"
+    ]
+    assert {node.lexical_weight for node in weight_nodes} <= {0.5, 1.5}
+    assert all(node.dense_weight == 1.0 for node in weight_nodes)
+
+
+def test_phase_accounting_is_recorded_per_stage(built_index: LoadedIndex) -> None:
+    result, _ = run(built_index)
+    accounting = result.phase_accounting
+    assert set(accounting) == {"explore", "refine", "exploit"}
+    for stage, values in accounting.items():
+        assert {"retrieval_calls", "embedding_calls", "llm_calls", "nodes"} <= set(values), stage
+    # The same numbers ride in the replayable trace.
+    assert result.trace.config["phase_accounting"] == accounting
+    total = sum(values["retrieval_calls"] for values in accounting.values())
+    assert total == result.trace.retrieval_calls
+    # Temperature anneals wide-to-narrow across the stages.
+    assert (
+        accounting["explore"]["temperature"]
+        > accounting["refine"]["temperature"]
+        > accounting["exploit"]["temperature"]
+    )
+
+
+def test_annealed_schedule_runs_and_stays_deterministic(built_index: LoadedIndex) -> None:
+    from cybernaut_mini.agent.schedule import ANNEALED_SCHEDULE
+    from cybernaut_mini.agent.search import SearchAgent
+    from cybernaut_mini.providers.judge import HeuristicJudge
+    from cybernaut_mini.providers.query_generator import HeuristicQueryGenerator
+
+    processor = TextProcessor(use_spacy=False)
+
+    def run_annealed():
+        agent = SearchAgent(
+            built_index,
+            processor=processor,
+            provider=HashEmbedder(dim=64),
+            generator=HeuristicQueryGenerator(processor),
+            judge=HeuristicJudge(processor),
+            rrf_config=agent_config().rrf,
+            stage_schedule=ANNEALED_SCHEDULE,
+        )
+        return agent.run(QUESTION, None, {})
+
+    first = run_annealed()
+    second = run_annealed()
+    assert first.hits
+    assert first.trace.retrieval_calls <= 18
+    assert first.trace.decision_fingerprint() == second.trace.decision_fingerprint()
+    types = {node.action["type"] for node in first.trace.nodes if node.action}
+    assert "AdjustHybridWeights" in types
+
+
+def test_config_driven_schedule_reaches_the_agent(built_index: LoadedIndex) -> None:
+    """A per-stage override mapping changes what the agent actually executes:
+    with the refine knob variants switched off, no AdjustHybridWeights or
+    ToggleRerankers node may appear."""
+    from cybernaut_mini.agent.schedule import schedule_from_config
+    from cybernaut_mini.agent.search import SearchAgent
+    from cybernaut_mini.providers.judge import HeuristicJudge
+    from cybernaut_mini.providers.query_generator import HeuristicQueryGenerator
+
+    processor = TextProcessor(use_spacy=False)
+    schedule = schedule_from_config(
+        {"refine": {"weight_variants": [], "try_rerank_off": False}}
+    )
+    agent = SearchAgent(
+        built_index,
+        processor=processor,
+        provider=HashEmbedder(dim=64),
+        generator=HeuristicQueryGenerator(processor),
+        judge=HeuristicJudge(processor),
+        rrf_config=agent_config().rrf,
+        stage_schedule=schedule,
+    )
+    result = agent.run(QUESTION, None, {})
+    types = {node.action["type"] for node in result.trace.nodes if node.action}
+    assert "AdjustHybridWeights" not in types
+    assert "ToggleRerankers" not in types

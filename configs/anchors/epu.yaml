@@ -1,0 +1,215 @@
+# The full Economic Policy Uncertainty anchor set — the 60-sentence appendix,
+# verbatim from the TPU/EPU post ("Appendix: the full EPU anchor set").
+#
+# Source: https://nosible.com/blog/an-embedding-based-approach-to-trade-and-economic-policy-uncertainty
+#   Local copy: docs/blog-archive/an-embedding-based-approach-to-trade-and-economic-policy-uncertainty.md
+#
+# Ten levers (22 matched pairs, 44 sentences) plus two category blocks (8 pairs,
+# 16 sentences) = 60 sentences. "A lever's score is the highest of its two framings.
+# Relevance is the highest score over all levers. Each event's polarity comes from
+# the pair whose better framing scores highest. U is the uncertain sentence, C the
+# certain one." There is no separate topic block: relevance reads the lever
+# sentences themselves. "The relevance threshold of 0.35 was chosen by a sweep
+# against the published US index and applied unchanged to both categories. The
+# category threshold is 0.25."
+name: epu
+source: https://nosible.com/blog/an-embedding-based-approach-to-trade-and-economic-policy-uncertainty
+thresholds:
+  relevance_floor: 0.35
+  polarity_temperature: 0.1
+  category_floor: 0.25
+levers:
+  monetary:
+    - uncertain: >-
+        It is uncertain whether the central bank will raise, cut or hold interest
+        rates, and markets do not know which way the decision will go.
+      certain: >-
+        The central bank has announced its decision to raise, cut or hold interest
+        rates, and markets know exactly where rates stand.
+    - uncertain: >-
+        The central bank may change its quantitative easing, balance-sheet or
+        money-supply policy, but its plans remain unclear.
+      certain: >-
+        The central bank has finalized its quantitative easing, balance-sheet and
+        money-supply policy, and its plans are clear.
+    - uncertain: >-
+        A dispute over the central bank's independence or leadership has made the
+        future of monetary policy unpredictable.
+      certain: >-
+        The central bank's independence and leadership are secure, and the future of
+        monetary policy is predictable.
+  taxes:
+    - uncertain: >-
+        The government may cut taxes, raise taxes or change tax credits, and proposals
+        are on the table, but nothing has been decided or enacted.
+      certain: >-
+        The government has enacted its plan to cut taxes, raise taxes or change tax
+        credits, and the new tax rules are law.
+    - uncertain: >-
+        A major overhaul of the tax code has been proposed and is being debated, and
+        it is uncertain whether the tax reform will pass.
+      certain: >-
+        A major overhaul of the tax code has been signed into law, and the tax reform
+        is settled.
+  spending:
+    - uncertain: >-
+        Proposals to raise, cut or freeze public spending and funding are on the
+        table, but it is uncertain what the government will decide.
+      certain: >-
+        The government has finalized its decision to raise, cut or freeze public
+        spending and funding.
+    - uncertain: >-
+        The federal budget, appropriations or economic stimulus package has been
+        proposed but is stuck in negotiations and may not pass.
+      certain: >-
+        The federal budget, appropriations or economic stimulus package has been
+        passed and signed into law.
+  debt:
+    - uncertain: >-
+        A debt-ceiling standoff or looming government shutdown has left government
+        funding in doubt.
+      certain: >-
+        A debt-ceiling deal has been reached and the government shutdown has been
+        averted or ended, securing government funding.
+    - uncertain: >-
+        There is growing concern that the budget deficit, the national debt or the
+        currency could spiral into a sovereign-debt crisis.
+      certain: >-
+        The budget deficit and national debt are under control, and the
+        sovereign-debt and currency pressures have been resolved.
+  entitlements:
+    - uncertain: >-
+        Proposed changes, cuts or reforms to public pensions, retirement benefits and
+        welfare programs may or may not go ahead.
+      certain: >-
+        Changes, cuts or reforms to public pensions, retirement benefits and welfare
+        programs have been enacted and are final.
+  regulation:
+    - uncertain: >-
+        The government has proposed new rules or a rollback and is weighing whether
+        to tighten regulation on business or to deregulate, and the outcome is
+        uncertain.
+      certain: >-
+        The government has enacted its decision to tighten regulation on business or
+        to deregulate and roll back rules.
+    - uncertain: >-
+        An antitrust or competition case against companies is under way and its
+        outcome is uncertain.
+      certain: >-
+        The antitrust or competition case against the companies has been decided, and
+        the enforcement outcome is final.
+  financial_regulation:
+    - uncertain: >-
+        Regulators have proposed new supervision and capital rules for banks and
+        financial markets, but nothing is final and the rules remain in flux.
+      certain: >-
+        Regulators have finalized the supervision and capital rules for banks and
+        financial markets, and the rules are fixed.
+    - uncertain: >-
+        A bank bailout or rescue of the financial system is being debated and may or
+        may not happen.
+      certain: >-
+        The bank bailout and rescue of the financial system have been completed, and
+        the financial system has been stabilized.
+  trade:
+    - uncertain: >-
+        The government is threatening or proposing to impose, raise, suspend or lift
+        tariffs, but it is unclear what it will actually do.
+      certain: >-
+        The government has imposed, raised, suspended or lifted tariffs, and the
+        tariff decision has taken effect.
+    - uncertain: >-
+        A trade agreement between governments is under negotiation and may or may not
+        be concluded.
+      certain: >-
+        A trade agreement between governments has been signed and concluded.
+    - uncertain: >-
+        A trade war, trade dispute, sanctions or export controls could escalate, and
+        nobody knows how far it will go.
+      certain: >-
+        The trade war and trade dispute have been settled, and the sanctions and
+        export controls are fixed and final.
+  major_economic_policy_actions:
+    - uncertain: >-
+        A major economic law or executive order on the economy has been proposed and
+        is being considered, and may or may not be enacted.
+      certain: >-
+        A major economic law or executive order on the economy has been enacted and
+        is in force.
+    - uncertain: >-
+        A major economic reform or government intervention in the economy has been
+        proposed and is under discussion, and its fate is uncertain.
+      certain: >-
+        A major economic reform or government intervention in the economy has been
+        carried out as planned.
+    - uncertain: >-
+        The leadership of an economic agency may be fired, replaced or shaken up, and
+        the agency's direction is unclear.
+      certain: >-
+        New leadership of the economic agency has been appointed and confirmed, and
+        the agency's direction is settled.
+  shutting_down_the_economy:
+    - uncertain: >-
+        The government may shut down the economy and order businesses to close, and
+        how long the shutdown of the economy will last is unclear.
+      certain: >-
+        The government has shut down the economy and ordered businesses to close, and
+        the shutdown is now in force.
+    - uncertain: >-
+        It is unclear when the government will reopen the economy and let businesses
+        and economic activity resume.
+      certain: >-
+        The government has reopened the economy, and businesses and economic activity
+        are resuming as planned.
+categories:
+  national_security:
+    - uncertain: >-
+        A war, armed conflict or military invasion could break out or escalate, and
+        it is unclear how the conflict will unfold.
+      certain: >-
+        The war, armed conflict or military invasion has ended, and a ceasefire or
+        peace agreement is in place.
+    - uncertain: >-
+        There are fears of terrorism and warnings that a terrorist attack may happen.
+      certain: >-
+        The terrorist plot has been foiled and the attackers caught, and the
+        terrorism threat has been contained.
+    - uncertain: >-
+        It is uncertain whether defense spending, the military budget or weapons
+        procurement will be increased or cut.
+      certain: >-
+        The defense budget has been approved, settling defense spending, the military
+        budget and weapons procurement.
+    - uncertain: >-
+        Sanctions, blockades or embargoes are being threatened or considered, and it
+        is unclear whether they will be imposed.
+      certain: >-
+        The sanctions, blockades or embargoes have been imposed or lifted, and the
+        decision is final.
+  healthcare:
+    - uncertain: >-
+        The future of government health insurance and public healthcare programs is
+        uncertain, with changes proposed but not decided.
+      certain: >-
+        The changes to government health insurance and public healthcare programs
+        have been enacted and finalized.
+    - uncertain: >-
+        Health insurance coverage, premiums, subsidies and healthcare costs may
+        change, and people face an unpredictable outlook.
+      certain: >-
+        Health insurance coverage, premiums, subsidies and healthcare costs have been
+        set, and people have a clear outlook.
+    - uncertain: >-
+        Decisions on drug pricing, medical products and pharmaceutical or vaccine
+        regulation are pending, leaving the industry uncertain.
+      certain: >-
+        Decisions on drug pricing, medical products and pharmaceutical or vaccine
+        regulation have been finalized and announced.
+    - uncertain: >-
+        The government may fire health officials, cut the funding of its health
+        agencies or shake up their leadership, and the direction of health policy is
+        unclear.
+      certain: >-
+        The government has appointed and confirmed the leadership of its health
+        agencies and secured their funding, and the direction of health policy is
+        settled.

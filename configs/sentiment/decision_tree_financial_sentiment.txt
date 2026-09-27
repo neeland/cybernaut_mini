@@ -1,0 +1,77 @@
+
+# TASK DESCRIPTION
+
+Read through the following snippet of text carefully and classify the **financial sentiment** as
+either negative, neutral, or positive. You must also provide a short rationale for why you
+assigned the financial sentiment you did.
+
+For clarity here are the definitions negative, neutral, and positive sentiments:
+
+   - **Negative**: The snippet describes an event or development that has had, is having, or is
+       expected to have a material negative impact on the company's financial performance, share price, reputation,
+       or outlook.
+
+   - **Neutral**: The snippet is informational/descriptive and is not expected to have a material positive or
+       negative impact on the company.
+
+   - **Positive**: The snippet describes an event or development that has had, is having, or is expected to have
+       a material positive impact on the company's financial performance, share price, reputation, or outlook.
+
+Materiality note:
+- “Material impact” includes likely effects on share price, revenue, costs, profitability, cash flow, guidance,
+regulatory exposure, reputation, risk exposure, or competitive position.
+
+# TASK GUIDELINES
+
+For the avoidance of doubt here is a decision tree that you can follow to arrive at the most appropriate
+sentiment classification for the snippet. Pay careful attention to the logic. Don't deviate.
+
+START
+│
+├── Step 1: Carefully read and understand the snippet.
+│
+├── Step 2: Check for sentiment indicators:
+│
+├── Is the snippet clearly NEGATIVE?
+│     (share price decline, losses, scandals, lawsuits, layoffs, product recalls, regulatory fines,
+│      leadership resignations, declining sales, market-share losses, reputational damage etc.)
+│    │
+│    ├── YES → Classify as "negative"
+│    │      └── Provide a rationale by summarizing WHY the snippet is negative.
+│    │
+│    └── NO → Continue below
+│
+├── Is the snippet clearly POSITIVE?
+│     (share price increases, strong earnings, favorable partnerships, successful product launches, awards,
+│      expansion plans, positive analyst coverage, reputational enhancement, etc.)
+│    │
+│    ├── YES → Classify as "positive"
+│    │      └── Provide a rationale by summarizing WHY the snippet is positive.
+│    │
+│    └── NO → Continue below
+│
+└── If neither clearly positive nor negative → Classify as "neutral"
+         (routine product announcements without performance implications, leadership appointments,
+          scheduled reports, factual statements, general industry overviews, etc.)
+       └── Provide a rationale by summarizing the WHY the snippet is neutral.
+
+If there is conflicting sentiment in the snippet pick the most dominant one, otherwise default to **neutral**.
+
+# RESPONSE FORMAT
+
+You must respond with ONLY a valid JSON object formatted as follows. DO NOT WRITE ANY PREAMBLE JUST RETURN JSON.
+
+{{
+   "rationale": "A one-sentence rationale for your classification",
+   "financial_sentiment": "either negative, neutral, or positive"
+}}
+
+# SNIPPET TO LABEL
+
+Here is the snippet we would like you to assign a negative, neutral, or positive financial sentiment label to:
+
+{text}
+
+P.S. REMEMBER TO READ THE SNIPPET CAREFULLY AND FOLLOW THE GUIDELINES TO ARRIVE AT THE MOST APPROPRIATE
+FINANCIAL SENTIMENT CLASSIFICATION. WHEN IN DOUBT, YOU SHOULD DEFER TO A "neutral" CLASSIFICATION FOR THE SNIPPET.
+GOOD LUCK!
