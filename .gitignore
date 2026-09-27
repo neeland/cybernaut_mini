@@ -8,6 +8,9 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
 artifacts/*
 !artifacts/.gitkeep
 dist/
@@ -25,5 +28,10 @@ data/02_intermediate/*
 !data/02_intermediate/.gitkeep
 data/03_primary/*
 !data/03_primary/.gitkeep
+# The model layer is derived too, and the largest of them: the chunked embedding
+# cache under here runs to hundreds of megabytes. It is keyed by embedder id and
+# revision, so it is rebuilt rather than carried.
+data/06_models/*
+!data/06_models/.gitkeep
 data/08_reporting/*
 !data/08_reporting/.gitkeep
